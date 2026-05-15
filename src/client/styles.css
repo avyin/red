@@ -1,0 +1,281 @@
+:root {
+  color: #222222;
+  background: #f6f6f3;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: #f6f6f3;
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+.app-shell {
+  width: min(100%, 980px);
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 40px;
+}
+
+.brand {
+  color: #1d1d1d;
+  font-size: 1.2rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.narrow {
+  width: min(100%, 680px);
+}
+
+.page-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+h1 {
+  margin: 0;
+  color: #1f2a24;
+  font-size: 2rem;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+p {
+  margin: 0;
+}
+
+.page-heading p {
+  margin-top: 8px;
+  color: #666666;
+}
+
+.search,
+.note-form input,
+.note-form textarea {
+  width: 100%;
+  border: 1px solid #d8d8d0;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #222222;
+  outline: none;
+}
+
+.search,
+.note-form input {
+  min-height: 44px;
+  padding: 10px 12px;
+}
+
+.note-form textarea {
+  min-height: 180px;
+  padding: 12px;
+  resize: vertical;
+}
+
+.search:focus,
+.note-form input:focus,
+.note-form textarea:focus {
+  border-color: #3f7d5a;
+  box-shadow: 0 0 0 3px rgba(63, 125, 90, 0.15);
+}
+
+.note-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.note-card,
+.detail-card {
+  border: 1px solid #deded6;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(30, 30, 30, 0.06);
+}
+
+.note-card {
+  display: flex;
+  min-height: 170px;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 22px;
+  padding: 18px;
+  text-decoration: none;
+  transition:
+    border-color 140ms ease,
+    transform 140ms ease;
+}
+
+.note-card:hover {
+  border-color: #3f7d5a;
+  transform: translateY(-1px);
+}
+
+.note-content {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #252525;
+  line-height: 1.55;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+}
+
+.detail-card {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 22px;
+}
+
+.detail-content {
+  color: #222222;
+  font-size: 1.05rem;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.note-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: #686868;
+  font-size: 0.9rem;
+}
+
+.note-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.note-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #333333;
+  font-weight: 650;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.button {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #d1d1ca;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #222222;
+  padding: 9px 14px;
+  cursor: pointer;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.button:hover:not(:disabled) {
+  border-color: #3f7d5a;
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.primary {
+  border-color: #2f6847;
+  background: #2f6847;
+  color: #ffffff;
+}
+
+.primary:hover:not(:disabled) {
+  border-color: #255438;
+  background: #255438;
+}
+
+.danger {
+  border-color: #a33a36;
+  background: #a33a36;
+  color: #ffffff;
+}
+
+.danger:hover:not(:disabled) {
+  border-color: #842c29;
+  background: #842c29;
+}
+
+.text-link {
+  width: fit-content;
+  color: #2f6847;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.text-link:hover {
+  text-decoration: underline;
+}
+
+.message {
+  color: #626262;
+  line-height: 1.5;
+}
+
+.error {
+  color: #982f2b;
+}
+
+@media (max-width: 620px) {
+  .app-shell {
+    padding: 18px;
+  }
+
+  .topbar {
+    margin-bottom: 28px;
+  }
+
+  h1 {
+    font-size: 1.7rem;
+  }
+
+  .note-grid {
+    grid-template-columns: 1fr;
+  }
+}
