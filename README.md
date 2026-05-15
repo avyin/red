@@ -55,6 +55,12 @@ Health check:
 curl http://localhost:3001/health
 ```
 
+Begin a learning session:
+
+```sh
+curl -X POST http://localhost:3001/api/sessions
+```
+
 Create a note:
 
 ```sh
@@ -64,6 +70,20 @@ curl -X POST http://localhost:3001/api/notes \
     "content": "The user learned that a process is an isolated running program, while a thread is an execution unit inside a process.",
     "source": "chatgpt"
   }'
+```
+
+Create a note with a session timestamp:
+
+```sh
+SESSION_ID="$(curl -sS -X POST http://localhost:3001/api/sessions | node -pe 'JSON.parse(require("fs").readFileSync(0, "utf8")).id')"
+
+curl -X POST http://localhost:3001/api/notes \
+  -H 'Content-Type: application/json' \
+  -d "{
+    \"content\": \"The user learned that ChatGPT Actions do not provide the user message timestamp automatically.\",
+    \"source\": \"chatgpt\",
+    \"sessionId\": \"$SESSION_ID\"
+  }"
 ```
 
 List notes:

@@ -14,6 +14,17 @@ const noteSchema = `Note:
           type:
             - string
             - "null"
+        sessionId:
+          type:
+            - string
+            - "null"
+          description: Optional session returned by beginSession.
+        sessionStartedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+          description: Server timestamp from beginSession for when the learning session began.
         createdAt:
           type: string
           format: date-time
@@ -31,6 +42,17 @@ const noteSchema = `Note:
           type:
             - string
             - "null"
+        sessionId:
+          type:
+            - string
+            - "null"
+          description: Session ID returned by beginSession. If provided, the server uses that session's startedAt timestamp.
+        sessionStartedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+          description: Server timestamp returned by beginSession. Prefer sending sessionId when available.
     NoteUpdate:
       type: object
       properties:
@@ -46,7 +68,19 @@ const noteSchema = `Note:
         - error
       properties:
         error:
-          type: string`;
+          type: string
+    LearningSession:
+      type: object
+      required:
+        - id
+        - startedAt
+      properties:
+        id:
+          type: string
+        startedAt:
+          type: string
+          format: date-time
+          description: Server timestamp for when this learning session began.`;
 
 export function getPublicBaseUrl() {
   const fallbackPort = process.env.PORT || "3001";
@@ -80,6 +114,18 @@ paths:
                 properties:
                   ok:
                     type: boolean
+  /api/sessions:
+    post:
+      operationId: beginSession
+      summary: Begin a learning session
+      description: Create a server-side timestamp that can later be attached to a note.
+      responses:
+        "201":
+          description: Learning session started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LearningSession"
   /api/notes:
     post:
       operationId: createNote

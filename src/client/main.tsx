@@ -7,6 +7,8 @@ type LearningNote = {
   id: string;
   content: string;
   source: string | null;
+  sessionId: string | null;
+  sessionStartedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -316,6 +318,11 @@ function NoteDetailPage() {
           <div className="note-meta">
             <span>Updated {formatDate(note.updatedAt)}</span>
           </div>
+          {note.sessionStartedAt ? (
+            <div className="note-meta">
+              <span>Session started {formatDate(note.sessionStartedAt)}</span>
+            </div>
+          ) : null}
           <div className="actions">
             <button className="button primary" type="button" onClick={() => setEditing(true)}>
               Edit

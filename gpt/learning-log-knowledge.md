@@ -11,6 +11,8 @@ Each learning note has:
 - `id`: unique note ID
 - `content`: the plain text learning note
 - `source`: optional origin such as `chatgpt`, a book title, a course, a video, a website, or `null`
+- `sessionId`: optional ID returned by `beginSession`
+- `sessionStartedAt`: optional server timestamp from `beginSession`
 - `createdAt`: creation timestamp
 - `updatedAt`: update timestamp
 
@@ -18,6 +20,7 @@ Each learning note has:
 
 Use the configured GPT Action API as the source of truth.
 
+- `beginSession`: begin a learning session and return a server-side timestamp. Call this once when the user starts a new learning-log interaction.
 - `createNote`: create a note when the user asks to save, log, remember, record, capture, or add something they learned.
 - `listNotes`: list notes, newest first. Use the `search` query when the user asks about a topic, keyword, source, or phrase.
 - `getNote`: fetch a specific note only when a note ID is known or was returned by a previous action call.
@@ -25,6 +28,8 @@ Use the configured GPT Action API as the source of truth.
 - `deleteNote`: delete one note.
 
 ## When To Call The API
+
+Call `beginSession` once at the beginning of a user interaction that may become a learning note. Keep the returned `id` and `startedAt` in conversation context. Do not invent these values.
 
 Call `createNote` when the user says something like:
 
@@ -59,6 +64,8 @@ When creating a note:
 - Use `source: "chatgpt"` when the learning came from the conversation and no other source is given.
 - If the user names a source, use that source instead.
 - If the user explicitly says no source, use `null`.
+- If you previously called `beginSession`, include its returned `id` as `sessionId`. The API will attach the server-side session timestamp to the note.
+- If the API asks for `sessionStartedAt`, use the exact `startedAt` value returned by `beginSession`. Do not generate your own timestamp.
 
 ## Response Style
 
