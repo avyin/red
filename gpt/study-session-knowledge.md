@@ -27,7 +27,6 @@ Each study session has:
 
 ## Action Reference
 
-- `beginStudySession`: creates a study session and returns the server-generated `startedAt` timestamp.
 - `startStudySession`: starts an untitled active study session with a GET request and returns the server-generated `startedAt` timestamp. It takes no arguments. Prefer this for automatic chat-session starts.
 - `listStudySessions`: returns study sessions newest first. Supports optional `search`.
 - `getStudySession`: returns one study session by ID.

@@ -116,30 +116,6 @@ paths:
                   ok:
                     type: boolean
   /api/study-sessions:
-    post:
-      operationId: beginStudySession
-      summary: Begin a study session
-      description: Create a study session with a server-side startedAt timestamp.
-      x-openai-isConsequential: false
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/StudySessionInput"
-      responses:
-        "201":
-          description: Study session started
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/StudySession"
-        "400":
-          description: Invalid request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
     get:
       operationId: listStudySessions
       summary: List study sessions
