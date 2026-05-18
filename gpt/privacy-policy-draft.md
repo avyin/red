@@ -1,29 +1,32 @@
-# Learning Log Privacy Policy
+# Study Session Log Privacy Policy
 
-Effective date: May 15, 2026
+Effective date: May 18, 2026
 
-Learning Log stores plain text learning notes that you choose to save.
+Study Session Log stores study-session summaries that you choose to save.
 
 ## Information Stored
 
-The Learning Log API stores:
+The Study Session Log API stores:
 
-- note content
+- study session topic
+- study session summary
 - optional source
+- session start timestamp
+- optional session end timestamp
 - creation timestamp
 - update timestamp
 
 ## How Information Is Used
 
-Stored notes are used only to let the GPT create, view, search, edit, and delete your learning notes.
+Stored sessions are used only to let the GPT create, view, search, edit, and delete your study sessions.
 
 ## Sharing
 
-This app does not intentionally sell or share your notes with third parties. If you expose the app through a public tunnel or hosting provider, requests will pass through that provider.
+This app does not intentionally sell or share your study sessions with third parties. If you expose the app through a public tunnel or hosting provider, requests will pass through that provider.
 
 ## Deletion
 
-You can delete notes through the GPT action or API. Deleted notes are removed from the SQLite database used by the app.
+You can delete study sessions through the GPT action or API. Deleted sessions are removed from the SQLite database used by the app.
 
 ## Security
 

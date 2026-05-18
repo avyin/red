@@ -1,6 +1,8 @@
-# Learning Log
+# Study Session Log
 
-A tiny learning journal for plain text notes.
+A tiny study-session journal for chat-based learning.
+
+The app stores study sessions, not standalone notes. A session can start when a user begins learning in ChatGPT, Gemini, Claude, or another chat assistant. When the user asks to save or end the session, the assistant updates that session with a summary and completion timestamp.
 
 ## Setup
 
@@ -55,67 +57,76 @@ Health check:
 curl http://localhost:3001/health
 ```
 
-Begin a learning session:
+Begin a study session:
 
 ```sh
-curl -X POST http://localhost:3001/api/sessions
+curl -X POST http://localhost:3001/api/study-sessions
 ```
 
-Create a note:
+Begin a study session with a topic:
 
 ```sh
-curl -X POST http://localhost:3001/api/notes \
+curl -X POST http://localhost:3001/api/study-sessions \
+  -H 'Content-Type: application/json' \
+  -d '{"topic":"Processes and threads","source":"chatgpt"}'
+```
+
+Save or end a study session:
+
+```sh
+curl -X PATCH http://localhost:3001/api/study-sessions/YOUR_SESSION_ID \
   -H 'Content-Type: application/json' \
   -d '{
-    "content": "The user learned that a process is an isolated running program, while a thread is an execution unit inside a process.",
-    "source": "chatgpt"
+    "topic": "Processes and threads",
+    "summary": "A process is an isolated running program. A thread is an execution unit inside a process, and threads in the same process can share memory.",
+    "source": "chatgpt",
+    "endSession": true
   }'
 ```
 
-Create a note with a session timestamp:
+Create a completed study session manually:
 
 ```sh
-SESSION_ID="$(curl -sS -X POST http://localhost:3001/api/sessions | node -pe 'JSON.parse(require("fs").readFileSync(0, "utf8")).id')"
-
-curl -X POST http://localhost:3001/api/notes \
+curl -X POST http://localhost:3001/api/study-sessions \
   -H 'Content-Type: application/json' \
-  -d "{
-    \"content\": \"The user learned that ChatGPT Actions do not provide the user message timestamp automatically.\",
-    \"source\": \"chatgpt\",
-    \"sessionId\": \"$SESSION_ID\"
-  }"
+  -d '{
+    "topic": "OpenAPI actions",
+    "summary": "ChatGPT Actions use an OpenAPI schema, and the server should provide timestamps rather than relying on the chat client.",
+    "source": "chatgpt",
+    "endSession": true
+  }'
 ```
 
-List notes:
+List study sessions:
 
 ```sh
-curl http://localhost:3001/api/notes
+curl http://localhost:3001/api/study-sessions
 ```
 
-Search notes:
+Search study sessions:
 
 ```sh
-curl 'http://localhost:3001/api/notes?search=thread'
+curl 'http://localhost:3001/api/study-sessions?search=thread'
 ```
 
-Get one note:
+Get one study session:
 
 ```sh
-curl http://localhost:3001/api/notes/YOUR_NOTE_ID
+curl http://localhost:3001/api/study-sessions/YOUR_SESSION_ID
 ```
 
-Update a note:
+Update a study session:
 
 ```sh
-curl -X PATCH http://localhost:3001/api/notes/YOUR_NOTE_ID \
+curl -X PATCH http://localhost:3001/api/study-sessions/YOUR_SESSION_ID \
   -H 'Content-Type: application/json' \
-  -d '{"content":"Updated learning note.","source":"chatgpt"}'
+  -d '{"summary":"Updated summary.","source":"chatgpt"}'
 ```
 
-Delete a note:
+Delete a study session:
 
 ```sh
-curl -X DELETE http://localhost:3001/api/notes/YOUR_NOTE_ID
+curl -X DELETE http://localhost:3001/api/study-sessions/YOUR_SESSION_ID
 ```
 
 OpenAPI YAML:
@@ -123,6 +134,42 @@ OpenAPI YAML:
 ```sh
 curl http://localhost:3001/openapi.yaml
 ```
+
+## Chat UX
+
+The assistant should not open with a big menu. A menu makes the workflow feel like a form, but the value is that the user can learn naturally in chat.
+
+Recommended opening:
+
+```text
+Tell me what you are studying. I will keep track in the background, and when you say "save this session" I will store a clean summary.
+```
+
+Good conversation starters:
+
+```text
+I am studying processes and threads.
+```
+
+```text
+Help me understand async JavaScript, then save the session.
+```
+
+```text
+What study sessions have I saved about TypeScript?
+```
+
+```text
+Save this as a study session.
+```
+
+Action workflow for a chat assistant:
+
+1. When the user starts a study-like interaction, call `beginStudySession`.
+2. Keep the returned `id` in conversation context.
+3. Teach, discuss, ask questions, or help the user refine their understanding.
+4. When the user says to save, log, or end the session, call `updateStudySession` with `topic`, `summary`, `source`, and `endSession: true`.
+5. Confirm briefly that the study session was saved.
 
 ## Ngrok
 

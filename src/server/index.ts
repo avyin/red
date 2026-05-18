@@ -5,14 +5,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  beginSession,
-  createNote,
-  deleteNote,
-  getNote,
-  getSession,
+  beginStudySession,
+  deleteStudySession,
+  getStudySession,
   initializeDatabase,
-  listNotes,
-  updateNote
+  listStudySessions,
+  updateStudySession
 } from "./db.js";
 import { buildOpenApiYaml } from "./openapi.js";
 
@@ -27,83 +25,86 @@ app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
 
-app.post("/api/sessions", (_req, res) => {
-  res.status(201).json(beginSession());
-});
-
-app.post("/api/notes", (req, res) => {
-  const content = readContent(req.body?.content);
-  if (!content) {
-    res.status(400).json({ error: "content is required" });
+app.post("/api/study-sessions", (req, res) => {
+  const topic = readOptionalText(req.body?.topic, "topic");
+  if (topic instanceof Error) {
+    res.status(400).json({ error: topic.message });
     return;
   }
 
-  const source = readOptionalSource(req.body?.source);
+  const summary = readOptionalText(req.body?.summary, "summary");
+  if (summary instanceof Error) {
+    res.status(400).json({ error: summary.message });
+    return;
+  }
+
+  const source = readOptionalText(req.body?.source, "source");
   if (source instanceof Error) {
     res.status(400).json({ error: source.message });
     return;
   }
 
-  const sessionId = readOptionalString(req.body?.sessionId, "sessionId");
-  if (sessionId instanceof Error) {
-    res.status(400).json({ error: sessionId.message });
+  const endSession = readOptionalBoolean(req.body?.endSession, "endSession");
+  if (endSession instanceof Error) {
+    res.status(400).json({ error: endSession.message });
     return;
   }
 
-  const submittedSessionStartedAt = readOptionalDateTime(
-    req.body?.sessionStartedAt,
-    "sessionStartedAt"
-  );
-  if (submittedSessionStartedAt instanceof Error) {
-    res.status(400).json({ error: submittedSessionStartedAt.message });
-    return;
-  }
+  const session = beginStudySession({
+    topic,
+    summary,
+    source,
+    endSession: endSession ?? false
+  });
 
-  let sessionStartedAt = submittedSessionStartedAt;
-  if (sessionId) {
-    const session = getSession(sessionId);
-    if (!session) {
-      res.status(400).json({ error: "sessionId was not found" });
-      return;
-    }
-
-    sessionStartedAt = session.startedAt;
-  }
-
-  const note = createNote({ content, source, sessionId, sessionStartedAt });
-  res.status(201).json(note);
+  res.status(201).json(session);
 });
 
-app.get("/api/notes", (req, res) => {
+app.get("/api/study-sessions", (req, res) => {
   const search = typeof req.query.search === "string" ? req.query.search : undefined;
-  res.json(listNotes(search));
+  res.json(listStudySessions(search));
 });
 
-app.get("/api/notes/:id", (req, res) => {
-  const note = getNote(req.params.id);
-  if (!note) {
-    res.status(404).json({ error: "note not found" });
+app.get("/api/study-sessions/:id", (req, res) => {
+  const session = getStudySession(req.params.id);
+  if (!session) {
+    res.status(404).json({ error: "study session not found" });
     return;
   }
 
-  res.json(note);
+  res.json(session);
 });
 
-app.patch("/api/notes/:id", (req, res) => {
-  const input: { content?: string; source?: string | null } = {};
+app.patch("/api/study-sessions/:id", (req, res) => {
+  const input: {
+    topic?: string | null;
+    summary?: string | null;
+    source?: string | null;
+    endSession?: boolean;
+  } = {};
 
-  if (Object.hasOwn(req.body ?? {}, "content")) {
-    const content = readContent(req.body.content);
-    if (!content) {
-      res.status(400).json({ error: "content must be a non-empty string" });
+  if (Object.hasOwn(req.body ?? {}, "topic")) {
+    const topic = readOptionalText(req.body.topic, "topic");
+    if (topic instanceof Error) {
+      res.status(400).json({ error: topic.message });
       return;
     }
 
-    input.content = content;
+    input.topic = topic;
+  }
+
+  if (Object.hasOwn(req.body ?? {}, "summary")) {
+    const summary = readOptionalText(req.body.summary, "summary");
+    if (summary instanceof Error) {
+      res.status(400).json({ error: summary.message });
+      return;
+    }
+
+    input.summary = summary;
   }
 
   if (Object.hasOwn(req.body ?? {}, "source")) {
-    const source = readOptionalSource(req.body.source);
+    const source = readOptionalText(req.body.source, "source");
     if (source instanceof Error) {
       res.status(400).json({ error: source.message });
       return;
@@ -112,23 +113,38 @@ app.patch("/api/notes/:id", (req, res) => {
     input.source = source;
   }
 
-  if (input.content === undefined && input.source === undefined) {
-    res.status(400).json({ error: "content or source is required" });
+  if (Object.hasOwn(req.body ?? {}, "endSession")) {
+    const endSession = readOptionalBoolean(req.body.endSession, "endSession");
+    if (endSession instanceof Error) {
+      res.status(400).json({ error: endSession.message });
+      return;
+    }
+
+    input.endSession = endSession ?? false;
+  }
+
+  if (
+    input.topic === undefined &&
+    input.summary === undefined &&
+    input.source === undefined &&
+    input.endSession === undefined
+  ) {
+    res.status(400).json({ error: "topic, summary, source, or endSession is required" });
     return;
   }
 
-  const note = updateNote(req.params.id, input);
-  if (!note) {
-    res.status(404).json({ error: "note not found" });
+  const session = updateStudySession(req.params.id, input);
+  if (!session) {
+    res.status(404).json({ error: "study session not found" });
     return;
   }
 
-  res.json(note);
+  res.json(session);
 });
 
-app.delete("/api/notes/:id", (req, res) => {
-  if (!deleteNote(req.params.id)) {
-    res.status(404).json({ error: "note not found" });
+app.delete("/api/study-sessions/:id", (req, res) => {
+  if (!deleteStudySession(req.params.id)) {
+    res.status(404).json({ error: "study session not found" });
     return;
   }
 
@@ -151,29 +167,7 @@ if (fs.existsSync(clientIndex)) {
   });
 }
 
-function readContent(value: unknown) {
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const content = value.trim();
-  return content.length > 0 ? content : null;
-}
-
-function readOptionalSource(value: unknown) {
-  if (value == null) {
-    return null;
-  }
-
-  if (typeof value !== "string") {
-    return new Error("source must be a string");
-  }
-
-  const source = value.trim();
-  return source.length > 0 ? source : null;
-}
-
-function readOptionalString(value: unknown, fieldName: string) {
+function readOptionalText(value: unknown, fieldName: string) {
   if (value == null) {
     return null;
   }
@@ -186,17 +180,16 @@ function readOptionalString(value: unknown, fieldName: string) {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function readOptionalDateTime(value: unknown, fieldName: string) {
-  const dateTime = readOptionalString(value, fieldName);
-  if (dateTime instanceof Error || dateTime === null) {
-    return dateTime;
+function readOptionalBoolean(value: unknown, fieldName: string) {
+  if (value == null) {
+    return null;
   }
 
-  if (Number.isNaN(Date.parse(dateTime))) {
-    return new Error(`${fieldName} must be a valid date-time string`);
+  if (typeof value !== "boolean") {
+    return new Error(`${fieldName} must be a boolean`);
   }
 
-  return dateTime;
+  return value;
 }
 
 const server = app.listen(port, () => {
@@ -204,5 +197,5 @@ const server = app.listen(port, () => {
   const actualPort =
     address && typeof address === "object" ? address.port : port;
 
-  console.log(`Learning Log is running on http://localhost:${actualPort}`);
+  console.log(`Study Session Log is running on http://localhost:${actualPort}`);
 });

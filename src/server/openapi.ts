@@ -1,86 +1,87 @@
-const noteSchema = `Note:
+const schemas = `StudySession:
       type: object
       required:
         - id
-        - content
+        - startedAt
         - createdAt
         - updatedAt
       properties:
         id:
           type: string
-        content:
-          type: string
+        topic:
+          type:
+            - string
+            - "null"
+          description: Short topic or title for the study session.
+        summary:
+          type:
+            - string
+            - "null"
+          description: Plain text summary of what the user studied or learned.
         source:
           type:
             - string
             - "null"
-        sessionId:
-          type:
-            - string
-            - "null"
-          description: Optional session returned by beginSession.
-        sessionStartedAt:
+          description: Optional source such as chatgpt, gemini, claude, a course, a book, or a URL.
+        startedAt:
+          type: string
+          format: date-time
+          description: Server timestamp for when the study session began.
+        endedAt:
           type:
             - string
             - "null"
           format: date-time
-          description: Server timestamp from beginSession for when the learning session began.
+          description: Server timestamp for when the study session was ended or saved.
         createdAt:
           type: string
           format: date-time
         updatedAt:
           type: string
           format: date-time
-    NoteInput:
+    StudySessionInput:
       type: object
-      required:
-        - content
       properties:
-        content:
-          type: string
+        topic:
+          type:
+            - string
+            - "null"
+        summary:
+          type:
+            - string
+            - "null"
         source:
           type:
             - string
             - "null"
-        sessionId:
-          type:
-            - string
-            - "null"
-          description: Session ID returned by beginSession. If provided, the server uses that session's startedAt timestamp.
-        sessionStartedAt:
-          type:
-            - string
-            - "null"
-          format: date-time
-          description: Server timestamp returned by beginSession. Prefer sending sessionId when available.
-    NoteUpdate:
+        endSession:
+          type: boolean
+          description: Set true when creating a manually completed session. Omit or false when beginning a chat study session.
+    StudySessionUpdate:
       type: object
       properties:
-        content:
-          type: string
+        topic:
+          type:
+            - string
+            - "null"
+        summary:
+          type:
+            - string
+            - "null"
         source:
           type:
             - string
             - "null"
+        endSession:
+          type: boolean
+          description: Set true when the user asks to save or end the study session. The server will set endedAt.
     Error:
       type: object
       required:
         - error
       properties:
         error:
-          type: string
-    LearningSession:
-      type: object
-      required:
-        - id
-        - startedAt
-      properties:
-        id:
-          type: string
-        startedAt:
-          type: string
-          format: date-time
-          description: Server timestamp for when this learning session began.`;
+          type: string`;
 
 export function getPublicBaseUrl() {
   const fallbackPort = process.env.PORT || "3001";
@@ -95,8 +96,8 @@ export function buildOpenApiYaml() {
 
   return `openapi: 3.1.0
 info:
-  title: Learning Log API
-  version: 0.1.0
+  title: Study Session Log API
+  version: 0.2.0
 servers:
   - url: ${serverUrl}
 paths:
@@ -114,35 +115,24 @@ paths:
                 properties:
                   ok:
                     type: boolean
-  /api/sessions:
+  /api/study-sessions:
     post:
-      operationId: beginSession
-      summary: Begin a learning session
-      description: Create a server-side timestamp that can later be attached to a note.
-      responses:
-        "201":
-          description: Learning session started
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LearningSession"
-  /api/notes:
-    post:
-      operationId: createNote
-      summary: Create a learning note
+      operationId: beginStudySession
+      summary: Begin a study session
+      description: Create a study session with a server-side startedAt timestamp. Call this when a chat study interaction begins.
       requestBody:
-        required: true
+        required: false
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/NoteInput"
+              $ref: "#/components/schemas/StudySessionInput"
       responses:
         "201":
-          description: Created note
+          description: Study session started
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Note"
+                $ref: "#/components/schemas/StudySession"
         "400":
           description: Invalid request
           content:
@@ -150,8 +140,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
     get:
-      operationId: listNotes
-      summary: List learning notes
+      operationId: listStudySessions
+      summary: List study sessions
       parameters:
         - name: search
           in: query
@@ -160,17 +150,17 @@ paths:
             type: string
       responses:
         "200":
-          description: Notes newest first
+          description: Study sessions newest first
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/Note"
-  /api/notes/{id}:
+                  $ref: "#/components/schemas/StudySession"
+  /api/study-sessions/{id}:
     get:
-      operationId: getNote
-      summary: Get one learning note
+      operationId: getStudySession
+      summary: Get one study session
       parameters:
         - name: id
           in: path
@@ -179,20 +169,21 @@ paths:
             type: string
       responses:
         "200":
-          description: Note
+          description: Study session
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Note"
+                $ref: "#/components/schemas/StudySession"
         "404":
-          description: Note not found
+          description: Study session not found
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
     patch:
-      operationId: updateNote
-      summary: Update a learning note
+      operationId: updateStudySession
+      summary: Update or complete a study session
+      description: Add topic, summary, or source. Set endSession true when the user asks to save or end the session.
       parameters:
         - name: id
           in: path
@@ -204,14 +195,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/NoteUpdate"
+              $ref: "#/components/schemas/StudySessionUpdate"
       responses:
         "200":
-          description: Updated note
+          description: Updated study session
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Note"
+                $ref: "#/components/schemas/StudySession"
         "400":
           description: Invalid request
           content:
@@ -219,14 +210,14 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
         "404":
-          description: Note not found
+          description: Study session not found
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
     delete:
-      operationId: deleteNote
-      summary: Delete a learning note
+      operationId: deleteStudySession
+      summary: Delete a study session
       parameters:
         - name: id
           in: path
@@ -237,13 +228,13 @@ paths:
         "204":
           description: Deleted
         "404":
-          description: Note not found
+          description: Study session not found
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
 components:
   schemas:
-    ${noteSchema}
+    ${schemas}
 `;
 }

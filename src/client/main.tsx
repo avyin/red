@@ -3,12 +3,13 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Link, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import "./styles.css";
 
-type LearningNote = {
+type StudySession = {
   id: string;
-  content: string;
+  topic: string | null;
+  summary: string | null;
   source: string | null;
-  sessionId: string | null;
-  sessionStartedAt: string | null;
+  startedAt: string;
+  endedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -48,18 +49,18 @@ function App() {
       <div className="app-shell">
         <header className="topbar">
           <Link to="/" className="brand">
-            Learning Log
+            Study Session Log
           </Link>
-          <Link to="/notes/new" className="button primary">
-            New Note
+          <Link to="/study-sessions/new" className="button primary">
+            New Session
           </Link>
         </header>
 
         <main>
           <Routes>
             <Route path="/" element={<HomePage />} />
-            <Route path="/notes/new" element={<NewNotePage />} />
-            <Route path="/notes/:id" element={<NoteDetailPage />} />
+            <Route path="/study-sessions/new" element={<NewStudySessionPage />} />
+            <Route path="/study-sessions/:id" element={<StudySessionDetailPage />} />
           </Routes>
         </main>
       </div>
@@ -68,7 +69,7 @@ function App() {
 }
 
 function HomePage() {
-  const [notes, setNotes] = React.useState<LearningNote[]>([]);
+  const [sessions, setSessions] = React.useState<StudySession[]>([]);
   const [search, setSearch] = React.useState("");
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -80,8 +81,10 @@ function HomePage() {
     setLoading(true);
     setError(null);
 
-    apiRequest<LearningNote[]>(`/api/notes${query}`, { signal: controller.signal })
-      .then(setNotes)
+    apiRequest<StudySession[]>(`/api/study-sessions${query}`, {
+      signal: controller.signal
+    })
+      .then(setSessions)
       .catch((err: unknown) => {
         if (!controller.signal.aborted) {
           setError(getErrorMessage(err));
@@ -100,8 +103,8 @@ function HomePage() {
     <section className="stack">
       <div className="page-heading">
         <div>
-          <h1>History</h1>
-          <p>Plain notes from what you learned.</p>
+          <h1>Study Sessions</h1>
+          <p>Saved summaries of what you studied in chat.</p>
         </div>
       </div>
 
@@ -109,22 +112,34 @@ function HomePage() {
         className="search"
         value={search}
         onChange={(event) => setSearch(event.target.value)}
-        placeholder="Search notes"
-        aria-label="Search notes"
+        placeholder="Search sessions"
+        aria-label="Search sessions"
       />
 
       {error ? <p className="message error">{error}</p> : null}
-      {loading ? <p className="message">Loading notes...</p> : null}
+      {loading ? <p className="message">Loading sessions...</p> : null}
 
-      {!loading && notes.length === 0 ? <p className="message">No notes found.</p> : null}
+      {!loading && sessions.length === 0 ? (
+        <p className="message">No study sessions found.</p>
+      ) : null}
 
-      <div className="note-grid">
-        {notes.map((note) => (
-          <Link key={note.id} to={`/notes/${note.id}`} className="note-card">
-            <p className="note-content">{note.content}</p>
-            <div className="note-meta">
-              <span>{note.source || "No source"}</span>
-              <span>{formatDate(note.createdAt)}</span>
+      <div className="session-grid">
+        {sessions.map((session) => (
+          <Link
+            key={session.id}
+            to={`/study-sessions/${session.id}`}
+            className="session-card"
+          >
+            <div className="card-body">
+              <h2>{session.topic || "Untitled study session"}</h2>
+              <p className="session-summary">
+                {session.summary || "Started, but no summary has been saved yet."}
+              </p>
+            </div>
+            <div className="session-meta">
+              <span>{session.source || "No source"}</span>
+              <span>{session.endedAt ? "Completed" : "Active"}</span>
+              <span>{formatDate(session.startedAt)}</span>
             </div>
           </Link>
         ))}
@@ -133,9 +148,10 @@ function HomePage() {
   );
 }
 
-function NewNotePage() {
+function NewStudySessionPage() {
   const navigate = useNavigate();
-  const [content, setContent] = React.useState("");
+  const [topic, setTopic] = React.useState("");
+  const [summary, setSummary] = React.useState("");
   const [source, setSource] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -146,14 +162,16 @@ function NewNotePage() {
     setError(null);
 
     try {
-      const note = await apiRequest<LearningNote>("/api/notes", {
+      const session = await apiRequest<StudySession>("/api/study-sessions", {
         method: "POST",
         body: JSON.stringify({
-          content,
-          source: source.trim() || undefined
+          topic: topic.trim() || undefined,
+          summary,
+          source: source.trim() || undefined,
+          endSession: true
         })
       });
-      navigate(`/notes/${note.id}`);
+      navigate(`/study-sessions/${session.id}`);
     } catch (err) {
       setError(getErrorMessage(err));
     } finally {
@@ -163,13 +181,15 @@ function NewNotePage() {
 
   return (
     <section className="stack narrow">
-      <h1>New Note</h1>
-      <NoteForm
-        content={content}
+      <h1>New Study Session</h1>
+      <StudySessionForm
+        topic={topic}
+        summary={summary}
         source={source}
         saving={saving}
         submitLabel="Save"
-        onContentChange={setContent}
+        onTopicChange={setTopic}
+        onSummaryChange={setSummary}
         onSourceChange={setSource}
         onSubmit={handleSubmit}
       />
@@ -178,11 +198,12 @@ function NewNotePage() {
   );
 }
 
-function NoteDetailPage() {
+function StudySessionDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [note, setNote] = React.useState<LearningNote | null>(null);
-  const [content, setContent] = React.useState("");
+  const [session, setSession] = React.useState<StudySession | null>(null);
+  const [topic, setTopic] = React.useState("");
+  const [summary, setSummary] = React.useState("");
   const [source, setSource] = React.useState("");
   const [editing, setEditing] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
@@ -198,11 +219,14 @@ function NoteDetailPage() {
     setLoading(true);
     setError(null);
 
-    apiRequest<LearningNote>(`/api/notes/${id}`, { signal: controller.signal })
-      .then((loadedNote) => {
-        setNote(loadedNote);
-        setContent(loadedNote.content);
-        setSource(loadedNote.source || "");
+    apiRequest<StudySession>(`/api/study-sessions/${id}`, {
+      signal: controller.signal
+    })
+      .then((loadedSession) => {
+        setSession(loadedSession);
+        setTopic(loadedSession.topic || "");
+        setSummary(loadedSession.summary || "");
+        setSource(loadedSession.source || "");
       })
       .catch((err: unknown) => {
         if (!controller.signal.aborted) {
@@ -228,14 +252,18 @@ function NoteDetailPage() {
     setError(null);
 
     try {
-      const updatedNote = await apiRequest<LearningNote>(`/api/notes/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          content,
-          source: source.trim() || null
-        })
-      });
-      setNote(updatedNote);
+      const updatedSession = await apiRequest<StudySession>(
+        `/api/study-sessions/${id}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            topic: topic.trim() || null,
+            summary: summary.trim() || null,
+            source: source.trim() || null
+          })
+        }
+      );
+      setSession(updatedSession);
       setEditing(false);
     } catch (err) {
       setError(getErrorMessage(err));
@@ -244,8 +272,8 @@ function NoteDetailPage() {
     }
   }
 
-  async function handleDelete() {
-    if (!id || !window.confirm("Delete this note?")) {
+  async function handleComplete() {
+    if (!id) {
       return;
     }
 
@@ -253,7 +281,31 @@ function NoteDetailPage() {
     setError(null);
 
     try {
-      await apiRequest<void>(`/api/notes/${id}`, { method: "DELETE" });
+      const updatedSession = await apiRequest<StudySession>(
+        `/api/study-sessions/${id}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ endSession: true })
+        }
+      );
+      setSession(updatedSession);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!id || !window.confirm("Delete this study session?")) {
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      await apiRequest<void>(`/api/study-sessions/${id}`, { method: "DELETE" });
       navigate("/");
     } catch (err) {
       setError(getErrorMessage(err));
@@ -262,15 +314,15 @@ function NoteDetailPage() {
   }
 
   if (loading) {
-    return <p className="message">Loading note...</p>;
+    return <p className="message">Loading study session...</p>;
   }
 
-  if (!note) {
+  if (!session) {
     return (
       <section className="stack narrow">
-        <p className="message error">{error || "Note not found."}</p>
+        <p className="message error">{error || "Study session not found."}</p>
         <Link to="/" className="button">
-          Back to History
+          Back to Sessions
         </Link>
       </section>
     );
@@ -279,18 +331,20 @@ function NoteDetailPage() {
   return (
     <section className="stack narrow">
       <Link to="/" className="text-link">
-        Back to History
+        Back to Sessions
       </Link>
 
       {editing ? (
         <>
-          <h1>Edit Note</h1>
-          <NoteForm
-            content={content}
+          <h1>Edit Study Session</h1>
+          <StudySessionForm
+            topic={topic}
+            summary={summary}
             source={source}
             saving={saving}
             submitLabel="Save"
-            onContentChange={setContent}
+            onTopicChange={setTopic}
+            onSummaryChange={setSummary}
             onSourceChange={setSource}
             onSubmit={handleUpdate}
           />
@@ -299,8 +353,9 @@ function NoteDetailPage() {
               className="button"
               type="button"
               onClick={() => {
-                setContent(note.content);
-                setSource(note.source || "");
+                setTopic(session.topic || "");
+                setSummary(session.summary || "");
+                setSource(session.source || "");
                 setEditing(false);
               }}
             >
@@ -310,23 +365,39 @@ function NoteDetailPage() {
         </>
       ) : (
         <article className="detail-card">
-          <p className="detail-content">{note.content}</p>
-          <div className="note-meta">
-            <span>{note.source || "No source"}</span>
-            <span>Created {formatDate(note.createdAt)}</span>
+          <div>
+            <h1>{session.topic || "Untitled study session"}</h1>
+            <p className="detail-content">
+              {session.summary || "This session has not been summarized yet."}
+            </p>
           </div>
-          <div className="note-meta">
-            <span>Updated {formatDate(note.updatedAt)}</span>
+
+          <div className="session-meta">
+            <span>{session.source || "No source"}</span>
+            <span>{session.endedAt ? "Completed" : "Active"}</span>
           </div>
-          {note.sessionStartedAt ? (
-            <div className="note-meta">
-              <span>Session started {formatDate(note.sessionStartedAt)}</span>
-            </div>
-          ) : null}
+          <div className="session-meta">
+            <span>Started {formatDate(session.startedAt)}</span>
+            {session.endedAt ? <span>Ended {formatDate(session.endedAt)}</span> : null}
+          </div>
+          <div className="session-meta">
+            <span>Updated {formatDate(session.updatedAt)}</span>
+          </div>
+
           <div className="actions">
             <button className="button primary" type="button" onClick={() => setEditing(true)}>
               Edit
             </button>
+            {!session.endedAt ? (
+              <button
+                className="button"
+                type="button"
+                onClick={handleComplete}
+                disabled={saving}
+              >
+                Mark Complete
+              </button>
+            ) : null}
             <button className="button danger" type="button" onClick={handleDelete} disabled={saving}>
               Delete
             </button>
@@ -339,25 +410,36 @@ function NoteDetailPage() {
   );
 }
 
-function NoteForm(props: {
-  content: string;
+function StudySessionForm(props: {
+  topic: string;
+  summary: string;
   source: string;
   saving: boolean;
   submitLabel: string;
-  onContentChange: (value: string) => void;
+  onTopicChange: (value: string) => void;
+  onSummaryChange: (value: string) => void;
   onSourceChange: (value: string) => void;
   onSubmit: (event: React.FormEvent) => void;
 }) {
   return (
-    <form className="note-form" onSubmit={props.onSubmit}>
+    <form className="session-form" onSubmit={props.onSubmit}>
       <label>
-        <span>Content</span>
+        <span>Topic</span>
+        <input
+          value={props.topic}
+          onChange={(event) => props.onTopicChange(event.target.value)}
+          placeholder="Processes and threads"
+          autoFocus
+        />
+      </label>
+
+      <label>
+        <span>Summary</span>
         <textarea
-          value={props.content}
-          onChange={(event) => props.onContentChange(event.target.value)}
+          value={props.summary}
+          onChange={(event) => props.onSummaryChange(event.target.value)}
           rows={8}
           required
-          autoFocus
         />
       </label>
 
@@ -374,7 +456,7 @@ function NoteForm(props: {
         <button
           className="button primary"
           type="submit"
-          disabled={props.saving || props.content.trim().length === 0}
+          disabled={props.saving || props.summary.trim().length === 0}
         >
           {props.saving ? "Saving..." : props.submitLabel}
         </button>

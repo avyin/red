@@ -1,23 +1,19 @@
 import "dotenv/config";
 
+import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { randomUUID } from "node:crypto";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 
-export type LearningNote = {
+export type StudySession = {
   id: string;
-  content: string;
+  topic: string | null;
+  summary: string | null;
   source: string | null;
-  sessionId: string | null;
-  sessionStartedAt: string | null;
+  startedAt: string;
+  endedAt: string | null;
   createdAt: string;
   updatedAt: string;
-};
-
-export type LearningSession = {
-  id: string;
-  startedAt: string;
 };
 
 let database: DatabaseSync | undefined;
@@ -43,45 +39,25 @@ export function getDatabase() {
 
 export function initializeDatabase(db = database ?? openDatabase()) {
   db.exec(`
-    CREATE TABLE IF NOT EXISTS learning_notes (
+    CREATE TABLE IF NOT EXISTS study_sessions (
       id TEXT PRIMARY KEY,
-      content TEXT NOT NULL,
+      topic TEXT,
+      summary TEXT,
       source TEXT,
-      sessionId TEXT,
-      sessionStartedAt TEXT,
+      startedAt TEXT NOT NULL,
+      endedAt TEXT,
       createdAt TEXT NOT NULL,
       updatedAt TEXT NOT NULL
     );
 
-    CREATE TABLE IF NOT EXISTS learning_sessions (
-      id TEXT PRIMARY KEY,
-      startedAt TEXT NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_learning_notes_createdAt
-      ON learning_notes (createdAt DESC);
+    CREATE INDEX IF NOT EXISTS idx_study_sessions_startedAt
+      ON study_sessions (startedAt DESC);
   `);
 
-  ensureColumn(db, "learning_notes", "sessionId", "TEXT");
-  ensureColumn(db, "learning_notes", "sessionStartedAt", "TEXT");
+  migrateLegacyNotes(db);
 
   if (!database) {
     database = db;
-  }
-}
-
-function ensureColumn(
-  db: DatabaseSync,
-  tableName: string,
-  columnName: string,
-  columnDefinition: string
-) {
-  const columns = db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{
-    name: string;
-  }>;
-
-  if (!columns.some((column) => column.name === columnName)) {
-    db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDefinition}`);
   }
 }
 
@@ -94,149 +70,190 @@ function openDatabase() {
   return new DatabaseSync(databasePath);
 }
 
-function normalizeSource(source: string | null | undefined) {
-  if (source == null) {
+function tableExists(db: DatabaseSync, tableName: string) {
+  const row = db
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+    .get(tableName) as { name: string } | undefined;
+
+  return Boolean(row);
+}
+
+function migrateLegacyNotes(db: DatabaseSync) {
+  if (!tableExists(db, "learning_notes")) {
+    return;
+  }
+
+  const legacyColumns = db.prepare("PRAGMA table_info(learning_notes)").all() as Array<{
+    name: string;
+  }>;
+  const hasSessionStartedAt = legacyColumns.some(
+    (column) => column.name === "sessionStartedAt"
+  );
+  const existingCount = db
+    .prepare("SELECT COUNT(*) AS count FROM study_sessions")
+    .get() as { count: number };
+
+  if (existingCount.count > 0) {
+    return;
+  }
+
+  db.exec(`
+    INSERT INTO study_sessions (
+      id,
+      topic,
+      summary,
+      source,
+      startedAt,
+      endedAt,
+      createdAt,
+      updatedAt
+    )
+    SELECT
+      id,
+      NULL,
+      content,
+      source,
+      ${hasSessionStartedAt ? "COALESCE(sessionStartedAt, createdAt)" : "createdAt"},
+      createdAt,
+      createdAt,
+      updatedAt
+    FROM learning_notes;
+  `);
+}
+
+function normalizeText(value: string | null | undefined) {
+  if (value == null) {
     return null;
   }
 
-  const trimmed = source.trim();
+  const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
 }
 
-export function beginSession() {
-  const session: LearningSession = {
-    id: randomUUID(),
-    startedAt: new Date().toISOString()
-  };
-
-  getDatabase()
-    .prepare(
-      `INSERT INTO learning_sessions (id, startedAt)
-       VALUES (?, ?)`
-    )
-    .run(session.id, session.startedAt);
-
-  return session;
-}
-
-export function getSession(id: string) {
-  return (
-    (getDatabase()
-      .prepare(
-        `SELECT id, startedAt
-         FROM learning_sessions
-         WHERE id = ?`
-      )
-      .get(id) as LearningSession | undefined) ?? null
-  );
-}
-
-export function createNote(input: {
-  content: string;
+export function beginStudySession(input: {
+  topic?: string | null;
+  summary?: string | null;
   source?: string | null;
-  sessionId?: string | null;
-  sessionStartedAt?: string | null;
+  endSession?: boolean;
 }) {
   const now = new Date().toISOString();
-  const note: LearningNote = {
+  const session: StudySession = {
     id: randomUUID(),
-    content: input.content,
-    source: normalizeSource(input.source),
-    sessionId: input.sessionId ?? null,
-    sessionStartedAt: input.sessionStartedAt ?? null,
+    topic: normalizeText(input.topic),
+    summary: normalizeText(input.summary),
+    source: normalizeText(input.source),
+    startedAt: now,
+    endedAt: input.endSession ? now : null,
     createdAt: now,
     updatedAt: now
   };
 
   getDatabase()
     .prepare(
-      `INSERT INTO learning_notes (
+      `INSERT INTO study_sessions (
          id,
-         content,
+         topic,
+         summary,
          source,
-         sessionId,
-         sessionStartedAt,
+         startedAt,
+         endedAt,
          createdAt,
          updatedAt
        )
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
-      note.id,
-      note.content,
-      note.source,
-      note.sessionId,
-      note.sessionStartedAt,
-      note.createdAt,
-      note.updatedAt
+      session.id,
+      session.topic,
+      session.summary,
+      session.source,
+      session.startedAt,
+      session.endedAt,
+      session.createdAt,
+      session.updatedAt
     );
 
-  return note;
+  return session;
 }
 
-export function listNotes(search?: string) {
+export function listStudySessions(search?: string) {
   const term = search?.trim();
 
   if (term) {
     const like = `%${term}%`;
     return getDatabase()
       .prepare(
-        `SELECT id, content, source, sessionId, sessionStartedAt, createdAt, updatedAt
-         FROM learning_notes
-         WHERE content LIKE ? OR source LIKE ?
-         ORDER BY createdAt DESC`
+        `SELECT id, topic, summary, source, startedAt, endedAt, createdAt, updatedAt
+         FROM study_sessions
+         WHERE topic LIKE ? OR summary LIKE ? OR source LIKE ?
+         ORDER BY startedAt DESC`
       )
-      .all(like, like) as LearningNote[];
+      .all(like, like, like) as StudySession[];
   }
 
   return getDatabase()
     .prepare(
-      `SELECT id, content, source, sessionId, sessionStartedAt, createdAt, updatedAt
-       FROM learning_notes
-       ORDER BY createdAt DESC`
+      `SELECT id, topic, summary, source, startedAt, endedAt, createdAt, updatedAt
+       FROM study_sessions
+       ORDER BY startedAt DESC`
     )
-    .all() as LearningNote[];
+    .all() as StudySession[];
 }
 
-export function getNote(id: string) {
+export function getStudySession(id: string) {
   return (
     (getDatabase()
       .prepare(
-        `SELECT id, content, source, sessionId, sessionStartedAt, createdAt, updatedAt
-         FROM learning_notes
+        `SELECT id, topic, summary, source, startedAt, endedAt, createdAt, updatedAt
+         FROM study_sessions
          WHERE id = ?`
       )
-      .get(id) as LearningNote | undefined) ?? null
+      .get(id) as StudySession | undefined) ?? null
   );
 }
 
-export function updateNote(
+export function updateStudySession(
   id: string,
-  input: { content?: string; source?: string | null }
+  input: {
+    topic?: string | null;
+    summary?: string | null;
+    source?: string | null;
+    endSession?: boolean;
+  }
 ) {
   const updates: string[] = [];
   const values: SQLInputValue[] = [];
 
-  if (input.content !== undefined) {
-    updates.push("content = ?");
-    values.push(input.content);
+  if (input.topic !== undefined) {
+    updates.push("topic = ?");
+    values.push(normalizeText(input.topic));
+  }
+
+  if (input.summary !== undefined) {
+    updates.push("summary = ?");
+    values.push(normalizeText(input.summary));
   }
 
   if (input.source !== undefined) {
     updates.push("source = ?");
-    values.push(normalizeSource(input.source));
-  }
-
-  if (updates.length === 0) {
-    return getNote(id);
+    values.push(normalizeText(input.source));
   }
 
   const updatedAt = new Date().toISOString();
+  if (input.endSession) {
+    updates.push("endedAt = COALESCE(endedAt, ?)");
+    values.push(updatedAt);
+  }
+
+  if (updates.length === 0) {
+    return getStudySession(id);
+  }
+
   values.push(updatedAt, id);
 
   const result = getDatabase()
     .prepare(
-      `UPDATE learning_notes
+      `UPDATE study_sessions
        SET ${updates.join(", ")}, updatedAt = ?
        WHERE id = ?`
     )
@@ -246,12 +263,12 @@ export function updateNote(
     return null;
   }
 
-  return getNote(id);
+  return getStudySession(id);
 }
 
-export function deleteNote(id: string) {
+export function deleteStudySession(id: string) {
   const result = getDatabase()
-    .prepare("DELETE FROM learning_notes WHERE id = ?")
+    .prepare("DELETE FROM study_sessions WHERE id = ?")
     .run(id);
 
   return Number(result.changes) > 0;
