@@ -119,7 +119,8 @@ paths:
     post:
       operationId: beginStudySession
       summary: Begin a study session
-      description: Create a study session with a server-side startedAt timestamp. Call this when a chat study interaction begins.
+      description: Create a study session with a server-side startedAt timestamp.
+      x-openai-isConsequential: false
       requestBody:
         required: false
         content:
@@ -148,6 +149,17 @@ paths:
           required: false
           schema:
             type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - completed
+              - active
+              - all
+            default: completed
+          description: Which sessions to return. Defaults to completed.
       responses:
         "200":
           description: Study sessions newest first
@@ -157,6 +169,18 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/StudySession"
+  /api/study-sessions/start:
+    get:
+      operationId: startStudySession
+      summary: Start a study session
+      description: Start tracking a chat study session with a server-side timestamp. No parameters are needed.
+      responses:
+        "200":
+          description: Study session started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudySession"
   /api/study-sessions/{id}:
     get:
       operationId: getStudySession

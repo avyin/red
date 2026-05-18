@@ -10,6 +10,7 @@ import {
   getStudySession,
   initializeDatabase,
   listStudySessions,
+  type StudySessionStatus,
   updateStudySession
 } from "./db.js";
 import { buildOpenApiYaml } from "./openapi.js";
@@ -23,6 +24,14 @@ app.use(express.json({ limit: "1mb" }));
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
+});
+
+app.get("/api/study-sessions/start", (_req, res) => {
+  res.json(
+    beginStudySession({
+      endSession: false
+    })
+  );
 });
 
 app.post("/api/study-sessions", (req, res) => {
@@ -62,7 +71,13 @@ app.post("/api/study-sessions", (req, res) => {
 
 app.get("/api/study-sessions", (req, res) => {
   const search = typeof req.query.search === "string" ? req.query.search : undefined;
-  res.json(listStudySessions(search));
+  const status = readSessionStatus(req.query.status);
+  if (status instanceof Error) {
+    res.status(400).json({ error: status.message });
+    return;
+  }
+
+  res.json(listStudySessions(search, status));
 });
 
 app.get("/api/study-sessions/:id", (req, res) => {
@@ -190,6 +205,22 @@ function readOptionalBoolean(value: unknown, fieldName: string) {
   }
 
   return value;
+}
+
+function readSessionStatus(value: unknown): StudySessionStatus | Error {
+  if (value == null) {
+    return "completed";
+  }
+
+  if (typeof value !== "string") {
+    return new Error("status must be completed, active, or all");
+  }
+
+  if (value === "completed" || value === "active" || value === "all") {
+    return value;
+  }
+
+  return new Error("status must be completed, active, or all");
 }
 
 const server = app.listen(port, () => {

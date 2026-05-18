@@ -16,6 +16,8 @@ export type StudySession = {
   updatedAt: string;
 };
 
+export type StudySessionStatus = "completed" | "active" | "all";
+
 let database: DatabaseSync | undefined;
 
 function getDatabasePath() {
@@ -130,6 +132,10 @@ function normalizeText(value: string | null | undefined) {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function normalizeTopic(value: string | null | undefined) {
+  return normalizeText(value) ?? "Untitled study session";
+}
+
 export function beginStudySession(input: {
   topic?: string | null;
   summary?: string | null;
@@ -139,9 +145,9 @@ export function beginStudySession(input: {
   const now = new Date().toISOString();
   const session: StudySession = {
     id: randomUUID(),
-    topic: normalizeText(input.topic),
+    topic: normalizeTopic(input.topic),
     summary: normalizeText(input.summary),
-    source: normalizeText(input.source),
+    source: normalizeText(input.source) ?? "chatgpt",
     startedAt: now,
     endedAt: input.endSession ? now : null,
     createdAt: now,
@@ -176,28 +182,33 @@ export function beginStudySession(input: {
   return session;
 }
 
-export function listStudySessions(search?: string) {
+export function listStudySessions(search?: string, status: StudySessionStatus = "completed") {
   const term = search?.trim();
+  const where: string[] = [];
+  const values: SQLInputValue[] = [];
+
+  if (status === "completed") {
+    where.push("endedAt IS NOT NULL");
+  } else if (status === "active") {
+    where.push("endedAt IS NULL");
+  }
 
   if (term) {
+    where.push("(topic LIKE ? OR summary LIKE ? OR source LIKE ?)");
     const like = `%${term}%`;
-    return getDatabase()
-      .prepare(
-        `SELECT id, topic, summary, source, startedAt, endedAt, createdAt, updatedAt
-         FROM study_sessions
-         WHERE topic LIKE ? OR summary LIKE ? OR source LIKE ?
-         ORDER BY startedAt DESC`
-      )
-      .all(like, like, like) as StudySession[];
+    values.push(like, like, like);
   }
+
+  const whereClause = where.length > 0 ? `WHERE ${where.join(" AND ")}` : "";
 
   return getDatabase()
     .prepare(
       `SELECT id, topic, summary, source, startedAt, endedAt, createdAt, updatedAt
        FROM study_sessions
+       ${whereClause}
        ORDER BY startedAt DESC`
     )
-    .all() as StudySession[];
+    .all(...values) as StudySession[];
 }
 
 export function getStudySession(id: string) {
@@ -226,7 +237,7 @@ export function updateStudySession(
 
   if (input.topic !== undefined) {
     updates.push("topic = ?");
-    values.push(normalizeText(input.topic));
+    values.push(normalizeTopic(input.topic));
   }
 
   if (input.summary !== undefined) {

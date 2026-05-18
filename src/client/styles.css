@@ -113,6 +113,35 @@ p {
   box-shadow: 0 0 0 3px rgba(63, 125, 90, 0.15);
 }
 
+.segmented-control {
+  display: inline-flex;
+  width: fit-content;
+  overflow: hidden;
+  border: 1px solid #d1d1ca;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.segmented-control button {
+  min-height: 38px;
+  border: 0;
+  border-right: 1px solid #d1d1ca;
+  background: transparent;
+  color: #333333;
+  cursor: pointer;
+  font-weight: 700;
+  padding: 8px 12px;
+}
+
+.segmented-control button:last-child {
+  border-right: 0;
+}
+
+.segmented-control button.selected {
+  background: #2f6847;
+  color: #ffffff;
+}
+
 .session-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));

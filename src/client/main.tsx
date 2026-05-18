@@ -14,6 +14,8 @@ type StudySession = {
   updatedAt: string;
 };
 
+type SessionStatus = "completed" | "active" | "all";
+
 async function apiRequest<T>(url: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   if (init?.body && !headers.has("Content-Type")) {
@@ -71,17 +73,21 @@ function App() {
 function HomePage() {
   const [sessions, setSessions] = React.useState<StudySession[]>([]);
   const [search, setSearch] = React.useState("");
+  const [status, setStatus] = React.useState<SessionStatus>("completed");
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     const controller = new AbortController();
-    const query = search.trim() ? `?search=${encodeURIComponent(search.trim())}` : "";
+    const params = new URLSearchParams({ status });
+    if (search.trim()) {
+      params.set("search", search.trim());
+    }
 
     setLoading(true);
     setError(null);
 
-    apiRequest<StudySession[]>(`/api/study-sessions${query}`, {
+    apiRequest<StudySession[]>(`/api/study-sessions?${params.toString()}`, {
       signal: controller.signal
     })
       .then(setSessions)
@@ -97,7 +103,7 @@ function HomePage() {
       });
 
     return () => controller.abort();
-  }, [search]);
+  }, [search, status]);
 
   return (
     <section className="stack">
@@ -115,6 +121,19 @@ function HomePage() {
         placeholder="Search sessions"
         aria-label="Search sessions"
       />
+
+      <div className="segmented-control" aria-label="Session status">
+        {(["completed", "active", "all"] as SessionStatus[]).map((value) => (
+          <button
+            key={value}
+            className={status === value ? "selected" : ""}
+            type="button"
+            onClick={() => setStatus(value)}
+          >
+            {capitalize(value)}
+          </button>
+        ))}
+      </div>
 
       {error ? <p className="message error">{error}</p> : null}
       {loading ? <p className="message">Loading sessions...</p> : null}
@@ -474,6 +493,10 @@ function formatDate(value: string) {
 
 function getErrorMessage(err: unknown) {
   return err instanceof Error ? err.message : "Something went wrong.";
+}
+
+function capitalize(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 createRoot(document.getElementById("root")!).render(

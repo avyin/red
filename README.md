@@ -63,6 +63,12 @@ Begin a study session:
 curl -X POST http://localhost:3001/api/study-sessions
 ```
 
+Begin a study session with the chat-friendly GET action:
+
+```sh
+curl http://localhost:3001/api/study-sessions/start
+```
+
 Begin a study session with a topic:
 
 ```sh
@@ -101,6 +107,12 @@ List study sessions:
 
 ```sh
 curl http://localhost:3001/api/study-sessions
+```
+
+List active study sessions:
+
+```sh
+curl 'http://localhost:3001/api/study-sessions?status=active'
 ```
 
 Search study sessions:
@@ -165,10 +177,10 @@ Save this as a study session.
 
 Action workflow for a chat assistant:
 
-1. When the user starts a study-like interaction, call `beginStudySession`.
+1. When the user starts a study-like interaction, call `startStudySession` with no arguments.
 2. Keep the returned `id` in conversation context.
 3. Teach, discuss, ask questions, or help the user refine their understanding.
-4. When the user says to save, log, or end the session, call `updateStudySession` with `topic`, `summary`, `source`, and `endSession: true`.
+4. When the user says to save, log, or end the session, infer the final `topic` and `summary` from the conversation and call `updateStudySession` with `topic`, `summary`, `source`, and `endSession: true`.
 5. Confirm briefly that the study session was saved.
 
 ## Ngrok
