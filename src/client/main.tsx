@@ -16,6 +16,33 @@ type StudySession = {
 };
 
 type SessionStatus = "completed" | "active" | "paused" | "all";
+type ConceptState = "new" | "learning" | "review" | "stable" | "stale";
+type ConceptStateFilter = ConceptState | "all";
+
+type Concept = {
+  id: string;
+  title: string;
+  summary: string | null;
+  state: ConceptState;
+  lastStudiedAt: string | null;
+  lastReviewedAt: string | null;
+  nextReviewAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type ConceptEvidence = {
+  id: string;
+  conceptId: string;
+  studySessionId: string | null;
+  evidenceType: string;
+  note: string | null;
+  stateBefore: ConceptState | null;
+  stateAfter: ConceptState | null;
+  createdAt: string;
+};
+
+const conceptStates: ConceptState[] = ["new", "learning", "review", "stable", "stale"];
 
 async function apiRequest<T>(url: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
@@ -54,14 +81,28 @@ function App() {
           <Link to="/" className="brand">
             Study Session Log
           </Link>
-          <Link to="/study-sessions/new" className="button primary">
-            New Session
-          </Link>
+          <nav className="topnav" aria-label="Primary">
+            <Link to="/" className="text-link">
+              Sessions
+            </Link>
+            <Link to="/concepts" className="text-link">
+              Concepts
+            </Link>
+            <Link to="/study-sessions/new" className="button primary">
+              New Session
+            </Link>
+            <Link to="/concepts/new" className="button">
+              New Concept
+            </Link>
+          </nav>
         </header>
 
         <main>
           <Routes>
             <Route path="/" element={<HomePage />} />
+            <Route path="/concepts" element={<ConceptsPage />} />
+            <Route path="/concepts/new" element={<NewConceptPage />} />
+            <Route path="/concepts/:id" element={<ConceptDetailPage />} />
             <Route path="/study-sessions/new" element={<NewStudySessionPage />} />
             <Route path="/study-sessions/:id" element={<StudySessionDetailPage />} />
           </Routes>
@@ -168,6 +209,105 @@ function HomePage() {
   );
 }
 
+function ConceptsPage() {
+  const [concepts, setConcepts] = React.useState<Concept[]>([]);
+  const [search, setSearch] = React.useState("");
+  const [state, setState] = React.useState<ConceptStateFilter>("all");
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    const controller = new AbortController();
+    const params = new URLSearchParams();
+    if (search.trim()) {
+      params.set("search", search.trim());
+    }
+    if (state !== "all") {
+      params.set("state", state);
+    }
+
+    const query = params.toString();
+
+    setLoading(true);
+    setError(null);
+
+    apiRequest<Concept[]>(`/api/concepts${query ? `?${query}` : ""}`, {
+      signal: controller.signal
+    })
+      .then(setConcepts)
+      .catch((err: unknown) => {
+        if (!controller.signal.aborted) {
+          setError(getErrorMessage(err));
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [search, state]);
+
+  return (
+    <section className="stack">
+      <div className="page-heading">
+        <div>
+          <h1>Concepts</h1>
+          <p>Durable learning map entries and their current states.</p>
+        </div>
+      </div>
+
+      <input
+        className="search"
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+        placeholder="Search concepts"
+        aria-label="Search concepts"
+      />
+
+      <div className="segmented-control" aria-label="Concept state">
+        {(["all", ...conceptStates] as ConceptStateFilter[]).map((value) => (
+          <button
+            key={value}
+            className={state === value ? "selected" : ""}
+            type="button"
+            onClick={() => setState(value)}
+          >
+            {formatState(value)}
+          </button>
+        ))}
+      </div>
+
+      {error ? <p className="message error">{error}</p> : null}
+      {loading ? <p className="message">Loading concepts...</p> : null}
+
+      {!loading && concepts.length === 0 ? <p className="message">No concepts found.</p> : null}
+
+      <div className="session-grid">
+        {concepts.map((concept) => (
+          <Link key={concept.id} to={`/concepts/${concept.id}`} className="session-card">
+            <div className="card-body">
+              <h2>{concept.title}</h2>
+              <p className="session-summary">
+                {concept.summary || "No current understanding summary has been saved yet."}
+              </p>
+            </div>
+            <div className="session-meta">
+              <span>{formatState(concept.state)}</span>
+              {concept.nextReviewAt ? (
+                <span>Review {formatDate(concept.nextReviewAt)}</span>
+              ) : (
+                <span>Updated {formatDate(concept.updatedAt)}</span>
+              )}
+            </div>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function NewStudySessionPage() {
   const navigate = useNavigate();
   const [topic, setTopic] = React.useState("");
@@ -211,6 +351,67 @@ function NewStudySessionPage() {
         onTopicChange={setTopic}
         onSummaryChange={setSummary}
         onSourceChange={setSource}
+        onSubmit={handleSubmit}
+      />
+      {error ? <p className="message error">{error}</p> : null}
+    </section>
+  );
+}
+
+function NewConceptPage() {
+  const navigate = useNavigate();
+  const [title, setTitle] = React.useState("");
+  const [summary, setSummary] = React.useState("");
+  const [state, setState] = React.useState<ConceptState>("new");
+  const [lastStudiedAt, setLastStudiedAt] = React.useState("");
+  const [lastReviewedAt, setLastReviewedAt] = React.useState("");
+  const [nextReviewAt, setNextReviewAt] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+
+    try {
+      const concept = await apiRequest<Concept>("/api/concepts", {
+        method: "POST",
+        body: JSON.stringify({
+          title: title.trim(),
+          summary: summary.trim() || null,
+          state,
+          lastStudiedAt: lastStudiedAt.trim() || null,
+          lastReviewedAt: lastReviewedAt.trim() || null,
+          nextReviewAt: nextReviewAt.trim() || null
+        })
+      });
+      navigate(`/concepts/${concept.id}`);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="stack narrow">
+      <h1>New Concept</h1>
+      <ConceptForm
+        title={title}
+        summary={summary}
+        state={state}
+        lastStudiedAt={lastStudiedAt}
+        lastReviewedAt={lastReviewedAt}
+        nextReviewAt={nextReviewAt}
+        saving={saving}
+        submitLabel="Save"
+        onTitleChange={setTitle}
+        onSummaryChange={setSummary}
+        onStateChange={setState}
+        onLastStudiedAtChange={setLastStudiedAt}
+        onLastReviewedAtChange={setLastReviewedAt}
+        onNextReviewAtChange={setNextReviewAt}
         onSubmit={handleSubmit}
       />
       {error ? <p className="message error">{error}</p> : null}
@@ -471,6 +672,233 @@ function StudySessionDetailPage() {
   );
 }
 
+function ConceptDetailPage() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [concept, setConcept] = React.useState<Concept | null>(null);
+  const [evidence, setEvidence] = React.useState<ConceptEvidence[]>([]);
+  const [title, setTitle] = React.useState("");
+  const [summary, setSummary] = React.useState("");
+  const [state, setState] = React.useState<ConceptState>("new");
+  const [lastStudiedAt, setLastStudiedAt] = React.useState("");
+  const [lastReviewedAt, setLastReviewedAt] = React.useState("");
+  const [nextReviewAt, setNextReviewAt] = React.useState("");
+  const [editing, setEditing] = React.useState(false);
+  const [loading, setLoading] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!id) {
+      return;
+    }
+
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
+
+    Promise.all([
+      apiRequest<Concept>(`/api/concepts/${id}`, { signal: controller.signal }),
+      apiRequest<ConceptEvidence[]>(`/api/concepts/${id}/evidence`, {
+        signal: controller.signal
+      })
+    ])
+      .then(([loadedConcept, loadedEvidence]) => {
+        setConcept(loadedConcept);
+        setEvidence(loadedEvidence);
+        setTitle(loadedConcept.title);
+        setSummary(loadedConcept.summary || "");
+        setState(loadedConcept.state);
+        setLastStudiedAt(loadedConcept.lastStudiedAt || "");
+        setLastReviewedAt(loadedConcept.lastReviewedAt || "");
+        setNextReviewAt(loadedConcept.nextReviewAt || "");
+      })
+      .catch((err: unknown) => {
+        if (!controller.signal.aborted) {
+          setError(getErrorMessage(err));
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [id]);
+
+  async function handleUpdate(event: React.FormEvent) {
+    event.preventDefault();
+    if (!id) {
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      const updatedConcept = await apiRequest<Concept>(`/api/concepts/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          title: title.trim(),
+          summary: summary.trim() || null,
+          state,
+          lastStudiedAt: lastStudiedAt.trim() || null,
+          lastReviewedAt: lastReviewedAt.trim() || null,
+          nextReviewAt: nextReviewAt.trim() || null
+        })
+      });
+      setConcept(updatedConcept);
+      setEditing(false);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!id || !window.confirm("Delete this concept?")) {
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      await apiRequest<void>(`/api/concepts/${id}`, { method: "DELETE" });
+      navigate("/concepts");
+    } catch (err) {
+      setError(getErrorMessage(err));
+      setSaving(false);
+    }
+  }
+
+  if (loading) {
+    return <p className="message">Loading concept...</p>;
+  }
+
+  if (!concept) {
+    return (
+      <section className="stack narrow">
+        <p className="message error">{error || "Concept not found."}</p>
+        <Link to="/concepts" className="button">
+          Back to Concepts
+        </Link>
+      </section>
+    );
+  }
+
+  return (
+    <section className="stack narrow">
+      <Link to="/concepts" className="text-link">
+        Back to Concepts
+      </Link>
+
+      {editing ? (
+        <>
+          <h1>Edit Concept</h1>
+          <ConceptForm
+            title={title}
+            summary={summary}
+            state={state}
+            lastStudiedAt={lastStudiedAt}
+            lastReviewedAt={lastReviewedAt}
+            nextReviewAt={nextReviewAt}
+            saving={saving}
+            submitLabel="Save"
+            onTitleChange={setTitle}
+            onSummaryChange={setSummary}
+            onStateChange={setState}
+            onLastStudiedAtChange={setLastStudiedAt}
+            onLastReviewedAtChange={setLastReviewedAt}
+            onNextReviewAtChange={setNextReviewAt}
+            onSubmit={handleUpdate}
+          />
+          <div className="actions">
+            <button
+              className="button"
+              type="button"
+              onClick={() => {
+                setTitle(concept.title);
+                setSummary(concept.summary || "");
+                setState(concept.state);
+                setLastStudiedAt(concept.lastStudiedAt || "");
+                setLastReviewedAt(concept.lastReviewedAt || "");
+                setNextReviewAt(concept.nextReviewAt || "");
+                setEditing(false);
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </>
+      ) : (
+        <article className="detail-card">
+          <div>
+            <h1>{concept.title}</h1>
+            <p className="detail-content">
+              {concept.summary || "This concept has no current understanding summary."}
+            </p>
+          </div>
+
+          <div className="session-meta">
+            <span>{formatState(concept.state)}</span>
+            {concept.lastStudiedAt ? (
+              <span>Studied {formatDate(concept.lastStudiedAt)}</span>
+            ) : null}
+            {concept.lastReviewedAt ? (
+              <span>Reviewed {formatDate(concept.lastReviewedAt)}</span>
+            ) : null}
+            {concept.nextReviewAt ? (
+              <span>Next review {formatDate(concept.nextReviewAt)}</span>
+            ) : null}
+          </div>
+          <div className="session-meta">
+            <span>Updated {formatDate(concept.updatedAt)}</span>
+          </div>
+
+          <div className="actions">
+            <button className="button primary" type="button" onClick={() => setEditing(true)}>
+              Edit
+            </button>
+            <button className="button danger" type="button" onClick={handleDelete} disabled={saving}>
+              Delete
+            </button>
+          </div>
+        </article>
+      )}
+
+      <section className="stack">
+        <h2 className="section-title">Recent Evidence</h2>
+        {evidence.length === 0 ? <p className="message">No evidence has been recorded.</p> : null}
+        <div className="evidence-list">
+          {evidence.map((item) => (
+            <article key={item.id} className="evidence-row">
+              <div>
+                <strong>{formatEvidenceType(item.evidenceType)}</strong>
+                <p>{item.note || "No note recorded."}</p>
+              </div>
+              <div className="session-meta">
+                {item.stateBefore || item.stateAfter ? (
+                  <span>
+                    {item.stateBefore ? formatState(item.stateBefore) : "None"} to{" "}
+                    {item.stateAfter ? formatState(item.stateAfter) : "None"}
+                  </span>
+                ) : null}
+                {item.studySessionId ? <span>Session {shortId(item.studySessionId)}</span> : null}
+                <span>{formatDate(item.createdAt)}</span>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      {error ? <p className="message error">{error}</p> : null}
+    </section>
+  );
+}
+
 function StudySessionForm(props: {
   topic: string;
   summary: string;
@@ -526,11 +954,111 @@ function StudySessionForm(props: {
   );
 }
 
+function ConceptForm(props: {
+  title: string;
+  summary: string;
+  state: ConceptState;
+  lastStudiedAt: string;
+  lastReviewedAt: string;
+  nextReviewAt: string;
+  saving: boolean;
+  submitLabel: string;
+  onTitleChange: (value: string) => void;
+  onSummaryChange: (value: string) => void;
+  onStateChange: (value: ConceptState) => void;
+  onLastStudiedAtChange: (value: string) => void;
+  onLastReviewedAtChange: (value: string) => void;
+  onNextReviewAtChange: (value: string) => void;
+  onSubmit: (event: React.FormEvent) => void;
+}) {
+  return (
+    <form className="session-form" onSubmit={props.onSubmit}>
+      <label>
+        <span>Title</span>
+        <input
+          value={props.title}
+          onChange={(event) => props.onTitleChange(event.target.value)}
+          placeholder="JavaScript promises"
+          autoFocus
+          required
+        />
+      </label>
+
+      <label>
+        <span>Summary</span>
+        <textarea
+          value={props.summary}
+          onChange={(event) => props.onSummaryChange(event.target.value)}
+          rows={8}
+        />
+      </label>
+
+      <label>
+        <span>State</span>
+        <select
+          value={props.state}
+          onChange={(event) => props.onStateChange(event.target.value as ConceptState)}
+        >
+          {conceptStates.map((state) => (
+            <option key={state} value={state}>
+              {formatState(state)}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <div className="form-grid">
+        <label>
+          <span>Last Studied</span>
+          <input
+            value={props.lastStudiedAt}
+            onChange={(event) => props.onLastStudiedAtChange(event.target.value)}
+            placeholder="2026-05-18T18:00:00.000Z"
+          />
+        </label>
+
+        <label>
+          <span>Last Reviewed</span>
+          <input
+            value={props.lastReviewedAt}
+            onChange={(event) => props.onLastReviewedAtChange(event.target.value)}
+            placeholder="2026-05-18T18:00:00.000Z"
+          />
+        </label>
+
+        <label>
+          <span>Next Review</span>
+          <input
+            value={props.nextReviewAt}
+            onChange={(event) => props.onNextReviewAtChange(event.target.value)}
+            placeholder="2026-05-25T18:00:00.000Z"
+          />
+        </label>
+      </div>
+
+      <div className="actions">
+        <button
+          className="button primary"
+          type="submit"
+          disabled={props.saving || props.title.trim().length === 0}
+        >
+          {props.saving ? "Saving..." : props.submitLabel}
+        </button>
+      </div>
+    </form>
+  );
+}
+
 function formatDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium",
     timeStyle: "short"
-  }).format(new Date(value));
+  }).format(date);
 }
 
 function getSessionStatus(session: StudySession): Exclude<SessionStatus, "all"> {
@@ -547,6 +1075,25 @@ function getSessionStatus(session: StudySession): Exclude<SessionStatus, "all"> 
 
 function formatSessionStatus(session: StudySession) {
   return capitalize(getSessionStatus(session));
+}
+
+function formatState(value: ConceptStateFilter) {
+  return value
+    .split("-")
+    .map((part) => capitalize(part))
+    .join(" ");
+}
+
+function formatEvidenceType(value: string) {
+  return value
+    .split(/[_-]/)
+    .filter(Boolean)
+    .map((part) => capitalize(part))
+    .join(" ");
+}
+
+function shortId(value: string) {
+  return value.slice(0, 8);
 }
 
 function getErrorMessage(err: unknown) {

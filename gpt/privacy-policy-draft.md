@@ -2,7 +2,7 @@
 
 Effective date: May 18, 2026
 
-Study Session Log stores study-session summaries that you choose to save.
+Study Session Log stores study-session summaries and concept memory that you choose to save.
 
 ## Information Stored
 
@@ -12,21 +12,27 @@ The Study Session Log API stores:
 - study session summary
 - optional source
 - session start timestamp
+- optional pause timestamp
 - optional session end timestamp
+- concept title
+- concept summary
+- concept state
+- optional concept review timestamps
+- concept evidence notes and state-change history
 - creation timestamp
 - update timestamp
 
 ## How Information Is Used
 
-Stored sessions are used only to let the GPT create, view, search, edit, and delete your study sessions.
+Stored sessions and concepts are used only to let the GPT create, view, search, edit, and delete your study sessions and learning map.
 
 ## Sharing
 
-This app does not intentionally sell or share your study sessions with third parties. If you expose the app through a public tunnel or hosting provider, requests will pass through that provider.
+This app does not intentionally sell or share your study sessions or concepts with third parties. If you expose the app through a public tunnel or hosting provider, requests will pass through that provider.
 
 ## Deletion
 
-You can delete study sessions through the GPT action or API. Deleted sessions are removed from the SQLite database used by the app.
+You can delete study sessions and concepts through the GPT action or API. Deleted records are removed from the SQLite database used by the app.
 
 ## Security
 

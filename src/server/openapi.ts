@@ -87,6 +87,261 @@ const schemas = `StudySession:
         resumeSession:
           type: boolean
           description: Set true when the user asks to continue a paused study session. The server will clear pausedAt.
+    ConceptState:
+      type: string
+      enum:
+        - new
+        - learning
+        - review
+        - stable
+        - stale
+    Concept:
+      type: object
+      required:
+        - id
+        - title
+        - state
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        summary:
+          type:
+            - string
+            - "null"
+          description: What the student currently understands about this concept.
+        state:
+          $ref: "#/components/schemas/ConceptState"
+        lastStudiedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        lastReviewedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        nextReviewAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ConceptInput:
+      type: object
+      required:
+        - title
+      properties:
+        title:
+          type: string
+        summary:
+          type:
+            - string
+            - "null"
+        state:
+          $ref: "#/components/schemas/ConceptState"
+        lastStudiedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        lastReviewedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        nextReviewAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+    ConceptUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+        summary:
+          type:
+            - string
+            - "null"
+        state:
+          $ref: "#/components/schemas/ConceptState"
+        lastStudiedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        lastReviewedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        nextReviewAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+    ConceptEvidence:
+      type: object
+      required:
+        - id
+        - conceptId
+        - evidenceType
+        - createdAt
+      properties:
+        id:
+          type: string
+        conceptId:
+          type: string
+        studySessionId:
+          type:
+            - string
+            - "null"
+        evidenceType:
+          type: string
+          description: Short cause such as study_session, review, user_explanation, or checkpoint.
+        note:
+          type:
+            - string
+            - "null"
+        stateBefore:
+          oneOf:
+            - $ref: "#/components/schemas/ConceptState"
+            - type: "null"
+        stateAfter:
+          oneOf:
+            - $ref: "#/components/schemas/ConceptState"
+            - type: "null"
+        createdAt:
+          type: string
+          format: date-time
+    ConceptEvidenceInput:
+      type: object
+      required:
+        - evidenceType
+      properties:
+        conceptId:
+          type: string
+          description: Required when recording evidence outside a concept-specific evidence path.
+        studySessionId:
+          type:
+            - string
+            - "null"
+        evidenceType:
+          type: string
+        note:
+          type:
+            - string
+            - "null"
+        stateBefore:
+          oneOf:
+            - $ref: "#/components/schemas/ConceptState"
+            - type: "null"
+        stateAfter:
+          oneOf:
+            - $ref: "#/components/schemas/ConceptState"
+            - type: "null"
+    CheckpointConceptEvidenceInput:
+      type: object
+      required:
+        - evidenceType
+      properties:
+        studySessionId:
+          type:
+            - string
+            - "null"
+        evidenceType:
+          type: string
+        note:
+          type:
+            - string
+            - "null"
+        stateBefore:
+          oneOf:
+            - $ref: "#/components/schemas/ConceptState"
+            - type: "null"
+        stateAfter:
+          oneOf:
+            - $ref: "#/components/schemas/ConceptState"
+            - type: "null"
+    CheckpointConceptInput:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Existing concept ID. Omit to create a new concept.
+        title:
+          type: string
+          description: Required when creating a new concept.
+        summary:
+          type:
+            - string
+            - "null"
+        state:
+          $ref: "#/components/schemas/ConceptState"
+        lastStudiedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        lastReviewedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        nextReviewAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        evidence:
+          $ref: "#/components/schemas/CheckpointConceptEvidenceInput"
+    LearningCheckpointInput:
+      type: object
+      properties:
+        studySessionId:
+          type:
+            - string
+            - "null"
+          description: Session to update or associate with concept evidence.
+        session:
+          $ref: "#/components/schemas/StudySessionUpdate"
+        concepts:
+          type: array
+          items:
+            $ref: "#/components/schemas/CheckpointConceptInput"
+        evidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConceptEvidenceInput"
+    LearningCheckpoint:
+      type: object
+      required:
+        - session
+        - concepts
+        - evidence
+      properties:
+        session:
+          oneOf:
+            - $ref: "#/components/schemas/StudySession"
+            - type: "null"
+        concepts:
+          type: array
+          items:
+            $ref: "#/components/schemas/Concept"
+        evidence:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConceptEvidence"
     Error:
       type: object
       required:
@@ -109,7 +364,7 @@ export function buildOpenApiYaml() {
   return `openapi: 3.1.0
 info:
   title: Study Session Log API
-  version: 0.3.0
+  version: 0.4.0
 servers:
   - url: ${serverUrl}
 paths:
@@ -158,13 +413,46 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/StudySession"
+    post:
+      operationId: createStudySession
+      summary: Create a study session
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StudySessionInput"
+      responses:
+        "201":
+          description: Study session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudySession"
   /api/study-sessions/start:
     get:
       operationId: startStudySession
       summary: Start a study session
-      description: Start tracking a chat study session with a server-side timestamp. No parameters are needed.
+      description: Backward-compatible GET start action. Prefer POST startStudySessionPost for new GPT actions.
       responses:
         "200":
+          description: Study session started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudySession"
+    post:
+      operationId: startStudySessionPost
+      summary: Start a study session
+      description: Preferred write endpoint for starting a chat study session after the user's first study-related message.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StudySessionInput"
+      responses:
+        "201":
           description: Study session started
           content:
             application/json:
@@ -231,6 +519,7 @@ paths:
     delete:
       operationId: deleteStudySession
       summary: Delete a study session
+      description: Destructive operation. Use only when the user explicitly asks to delete a session.
       parameters:
         - name: id
           in: path
@@ -242,6 +531,235 @@ paths:
           description: Deleted
         "404":
           description: Study session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/concepts:
+    get:
+      operationId: listConcepts
+      summary: List concepts
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - new
+              - learning
+              - review
+              - stable
+              - stale
+              - all
+          description: Optional concept state filter.
+      responses:
+        "200":
+          description: Concepts newest by update time
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Concept"
+    post:
+      operationId: createConcept
+      summary: Create concept
+      description: Low-risk learning-map update. Use when the user asks to save or update their map and there is evidence for the concept.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConceptInput"
+      responses:
+        "201":
+          description: Concept created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Concept"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/concepts/{id}:
+    get:
+      operationId: getConcept
+      summary: Get one concept
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Concept
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Concept"
+        "404":
+          description: Concept not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    patch:
+      operationId: updateConcept
+      summary: Update concept
+      description: Low-risk learning-map update. Update concept state only when supported by evidence.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConceptUpdate"
+      responses:
+        "200":
+          description: Concept updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Concept"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Concept not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      operationId: deleteConcept
+      summary: Delete concept
+      description: Destructive operation. Use only when the user explicitly asks to delete a concept.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Concept not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/concepts/{id}/evidence:
+    get:
+      operationId: listConceptEvidence
+      summary: List concept evidence
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: Recent evidence newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ConceptEvidence"
+        "404":
+          description: Concept not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      operationId: recordConceptEvidence
+      summary: Record concept evidence
+      description: Low-risk logging update that records why a concept state changed or why it should be reviewed.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConceptEvidenceInput"
+      responses:
+        "201":
+          description: Evidence recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConceptEvidence"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Concept not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/learning-checkpoints:
+    post:
+      operationId: recordLearningCheckpoint
+      summary: Record learning checkpoint
+      description: Batch natural checkpoint updates for one study session, multiple concepts, and concept evidence. Prefer this at pause, save, review completed, end of topic, update my map, and what should I study next.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LearningCheckpointInput"
+      responses:
+        "201":
+          description: Checkpoint recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LearningCheckpoint"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Session or concept not found
           content:
             application/json:
               schema:

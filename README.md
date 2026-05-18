@@ -1,8 +1,8 @@
 # Study Session Log
 
-A tiny study-session journal for chat-based learning.
+A tiny personal learning-memory system for chat-based learning.
 
-The app stores study sessions, not standalone notes. A session can start when a user begins learning in ChatGPT, Gemini, Claude, or another chat assistant. When the user asks to pause, the assistant marks the session paused so it can be resumed later. When the user asks to save or end the session, the assistant updates that session with a summary and completion timestamp.
+The app stores study sessions and concepts. A session is a temporary learning event: it starts when a user begins learning in ChatGPT, Gemini, Claude, or another chat assistant. A concept is a durable knowledge-map entry: it tracks what the student currently understands and what state that knowledge is in. When the user asks to pause, save, finish a topic, complete a review, or update their map, the assistant can batch session, concept, and evidence updates.
 
 ## Setup
 
@@ -57,13 +57,19 @@ Health check:
 curl http://localhost:3001/health
 ```
 
-Begin a study session:
+Begin a study session with the preferred write action:
+
+```sh
+curl -X POST http://localhost:3001/api/study-sessions/start
+```
+
+Create a study session with the general endpoint:
 
 ```sh
 curl -X POST http://localhost:3001/api/study-sessions
 ```
 
-Begin a study session with the chat-friendly GET action:
+Begin a study session with the backward-compatible GET action:
 
 ```sh
 curl http://localhost:3001/api/study-sessions/start
@@ -163,6 +169,98 @@ Delete a study session:
 curl -X DELETE http://localhost:3001/api/study-sessions/YOUR_SESSION_ID
 ```
 
+Create a concept:
+
+```sh
+curl -X POST http://localhost:3001/api/concepts \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "title": "JavaScript promises",
+    "summary": "Promises represent future results from asynchronous work.",
+    "state": "learning",
+    "lastStudiedAt": "2026-05-18T18:00:00.000Z"
+  }'
+```
+
+List concepts by state:
+
+```sh
+curl 'http://localhost:3001/api/concepts?state=review'
+```
+
+Search concepts:
+
+```sh
+curl 'http://localhost:3001/api/concepts?search=promise'
+```
+
+Get one concept:
+
+```sh
+curl http://localhost:3001/api/concepts/YOUR_CONCEPT_ID
+```
+
+Update a concept state:
+
+```sh
+curl -X PATCH http://localhost:3001/api/concepts/YOUR_CONCEPT_ID \
+  -H 'Content-Type: application/json' \
+  -d '{"state":"review","nextReviewAt":"2026-05-25T18:00:00.000Z"}'
+```
+
+Record evidence for a concept:
+
+```sh
+curl -X POST http://localhost:3001/api/concepts/YOUR_CONCEPT_ID/evidence \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "studySessionId": "YOUR_SESSION_ID",
+    "evidenceType": "user_explanation",
+    "note": "The user explained that a promise is a placeholder for a future async result.",
+    "stateBefore": "learning",
+    "stateAfter": "review"
+  }'
+```
+
+List concept evidence:
+
+```sh
+curl http://localhost:3001/api/concepts/YOUR_CONCEPT_ID/evidence
+```
+
+Record a learning checkpoint:
+
+```sh
+curl -X POST http://localhost:3001/api/learning-checkpoints \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "studySessionId": "YOUR_SESSION_ID",
+    "session": {
+      "summary": "The user practiced promises and explained future async results.",
+      "pauseSession": true
+    },
+    "concepts": [
+      {
+        "title": "JavaScript promises",
+        "summary": "Promises represent future results from asynchronous work.",
+        "state": "review",
+        "lastStudiedAt": "2026-05-18T18:00:00.000Z",
+        "nextReviewAt": "2026-05-25T18:00:00.000Z",
+        "evidence": {
+          "evidenceType": "checkpoint",
+          "note": "The user correctly explained the basic promise model."
+        }
+      }
+    ]
+  }'
+```
+
+Delete a concept:
+
+```sh
+curl -X DELETE http://localhost:3001/api/concepts/YOUR_CONCEPT_ID
+```
+
 OpenAPI YAML:
 
 ```sh
@@ -199,14 +297,18 @@ Save this as a study session.
 
 Action workflow for a chat assistant:
 
-1. When the user starts a study-like interaction, call `startStudySession` with no arguments.
+1. When the user starts a study-like interaction, call `startStudySessionPost`.
 2. Keep the returned `id` in conversation context.
-3. Teach, discuss, ask questions, or help the user refine their understanding.
-4. When the user says to pause or take a break, call `updateStudySession` with `pauseSession: true`. Optionally include a short progress `summary`.
-5. If the user clearly continues the same study topic in the same conversation, call `updateStudySession` with `resumeSession: true` before continuing. If the intent is ambiguous, ask whether they want to continue the paused session.
-6. In a new conversation, when the user asks to continue or pick up where they left off, call `listStudySessions` with `status=paused` and resume the clear match. Ask the user to choose if there are multiple plausible paused sessions.
-7. When the user says to save, log, or end the session, infer the final `topic` and `summary` from the conversation and call `updateStudySession` with `topic`, `summary`, `source`, and `endSession: true`.
-8. Confirm briefly that the study session was saved.
+3. Do not start duplicate sessions in the same conversation unless the topic clearly changes, the user asks to start something new, or the prior session ended.
+4. Teach in small loops: explain, ask, let the user answer, correct or refine, practice, summarize.
+5. Do not persist every conversational turn. Batch persistence at natural checkpoints.
+6. When the user says to pause or take a break, call `recordLearningCheckpoint` if concept updates are useful, or `updateStudySession` with `pauseSession: true` if only pausing.
+7. If the user clearly continues the same study topic in the same conversation, call `updateStudySession` with `resumeSession: true` before continuing. If the intent is ambiguous, ask whether they want to continue the paused session.
+8. In a new conversation, when the user asks to continue or pick up where they left off, call `listStudySessions` with `status=paused` and resume the clear match. Ask the user to choose if there are multiple plausible paused sessions.
+9. Update concepts only when there is evidence, such as the user explaining something back, answering correctly, applying a concept, or completing a review.
+10. Use concept states to decide review behavior: `new`, `learning`, `review`, `stable`, and `stale`.
+11. When the user says to save, log, end the session, finish a topic, complete a review, update the map, or asks what to study next, prefer `recordLearningCheckpoint` to batch session, concept, and evidence updates.
+12. Confirm briefly that the checkpoint or session was saved.
 
 ## Ngrok
 
