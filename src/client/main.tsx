@@ -9,12 +9,13 @@ type StudySession = {
   summary: string | null;
   source: string | null;
   startedAt: string;
+  pausedAt: string | null;
   endedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
 
-type SessionStatus = "completed" | "active" | "all";
+type SessionStatus = "completed" | "active" | "paused" | "all";
 
 async function apiRequest<T>(url: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
@@ -123,7 +124,7 @@ function HomePage() {
       />
 
       <div className="segmented-control" aria-label="Session status">
-        {(["completed", "active", "all"] as SessionStatus[]).map((value) => (
+        {(["completed", "active", "paused", "all"] as SessionStatus[]).map((value) => (
           <button
             key={value}
             className={status === value ? "selected" : ""}
@@ -157,7 +158,7 @@ function HomePage() {
             </div>
             <div className="session-meta">
               <span>{session.source || "No source"}</span>
-              <span>{session.endedAt ? "Completed" : "Active"}</span>
+              <span>{formatSessionStatus(session)}</span>
               <span>{formatDate(session.startedAt)}</span>
             </div>
           </Link>
@@ -292,6 +293,22 @@ function StudySessionDetailPage() {
   }
 
   async function handleComplete() {
+    await updateSessionState({ endSession: true });
+  }
+
+  async function handlePause() {
+    await updateSessionState({ pauseSession: true });
+  }
+
+  async function handleResume() {
+    await updateSessionState({ resumeSession: true });
+  }
+
+  async function updateSessionState(body: {
+    endSession?: boolean;
+    pauseSession?: boolean;
+    resumeSession?: boolean;
+  }) {
     if (!id) {
       return;
     }
@@ -304,7 +321,7 @@ function StudySessionDetailPage() {
         `/api/study-sessions/${id}`,
         {
           method: "PATCH",
-          body: JSON.stringify({ endSession: true })
+          body: JSON.stringify(body)
         }
       );
       setSession(updatedSession);
@@ -346,6 +363,8 @@ function StudySessionDetailPage() {
       </section>
     );
   }
+
+  const sessionStatus = getSessionStatus(session);
 
   return (
     <section className="stack narrow">
@@ -393,10 +412,13 @@ function StudySessionDetailPage() {
 
           <div className="session-meta">
             <span>{session.source || "No source"}</span>
-            <span>{session.endedAt ? "Completed" : "Active"}</span>
+            <span>{capitalize(sessionStatus)}</span>
           </div>
           <div className="session-meta">
             <span>Started {formatDate(session.startedAt)}</span>
+            {session.pausedAt && sessionStatus === "paused" ? (
+              <span>Paused {formatDate(session.pausedAt)}</span>
+            ) : null}
             {session.endedAt ? <span>Ended {formatDate(session.endedAt)}</span> : null}
           </div>
           <div className="session-meta">
@@ -407,7 +429,27 @@ function StudySessionDetailPage() {
             <button className="button primary" type="button" onClick={() => setEditing(true)}>
               Edit
             </button>
-            {!session.endedAt ? (
+            {sessionStatus === "active" ? (
+              <button
+                className="button"
+                type="button"
+                onClick={handlePause}
+                disabled={saving}
+              >
+                Pause
+              </button>
+            ) : null}
+            {sessionStatus === "paused" ? (
+              <button
+                className="button"
+                type="button"
+                onClick={handleResume}
+                disabled={saving}
+              >
+                Resume
+              </button>
+            ) : null}
+            {sessionStatus !== "completed" ? (
               <button
                 className="button"
                 type="button"
@@ -489,6 +531,22 @@ function formatDate(value: string) {
     dateStyle: "medium",
     timeStyle: "short"
   }).format(new Date(value));
+}
+
+function getSessionStatus(session: StudySession): Exclude<SessionStatus, "all"> {
+  if (session.endedAt) {
+    return "completed";
+  }
+
+  if (session.pausedAt) {
+    return "paused";
+  }
+
+  return "active";
+}
+
+function formatSessionStatus(session: StudySession) {
+  return capitalize(getSessionStatus(session));
 }
 
 function getErrorMessage(err: unknown) {

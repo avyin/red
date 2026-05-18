@@ -96,6 +96,8 @@ app.patch("/api/study-sessions/:id", (req, res) => {
     summary?: string | null;
     source?: string | null;
     endSession?: boolean;
+    pauseSession?: boolean;
+    resumeSession?: boolean;
   } = {};
 
   if (Object.hasOwn(req.body ?? {}, "topic")) {
@@ -138,13 +140,50 @@ app.patch("/api/study-sessions/:id", (req, res) => {
     input.endSession = endSession ?? false;
   }
 
+  if (Object.hasOwn(req.body ?? {}, "pauseSession")) {
+    const pauseSession = readOptionalBoolean(req.body.pauseSession, "pauseSession");
+    if (pauseSession instanceof Error) {
+      res.status(400).json({ error: pauseSession.message });
+      return;
+    }
+
+    input.pauseSession = pauseSession ?? false;
+  }
+
+  if (Object.hasOwn(req.body ?? {}, "resumeSession")) {
+    const resumeSession = readOptionalBoolean(req.body.resumeSession, "resumeSession");
+    if (resumeSession instanceof Error) {
+      res.status(400).json({ error: resumeSession.message });
+      return;
+    }
+
+    input.resumeSession = resumeSession ?? false;
+  }
+
+  const requestedStateActions = [
+    input.endSession,
+    input.pauseSession,
+    input.resumeSession
+  ].filter(Boolean).length;
+
+  if (requestedStateActions > 1) {
+    res.status(400).json({
+      error: "only one of endSession, pauseSession, or resumeSession can be true"
+    });
+    return;
+  }
+
   if (
     input.topic === undefined &&
     input.summary === undefined &&
     input.source === undefined &&
-    input.endSession === undefined
+    input.endSession === undefined &&
+    input.pauseSession === undefined &&
+    input.resumeSession === undefined
   ) {
-    res.status(400).json({ error: "topic, summary, source, or endSession is required" });
+    res.status(400).json({
+      error: "topic, summary, source, endSession, pauseSession, or resumeSession is required"
+    });
     return;
   }
 
@@ -213,14 +252,14 @@ function readSessionStatus(value: unknown): StudySessionStatus | Error {
   }
 
   if (typeof value !== "string") {
-    return new Error("status must be completed, active, or all");
+    return new Error("status must be completed, active, paused, or all");
   }
 
-  if (value === "completed" || value === "active" || value === "all") {
+  if (value === "completed" || value === "active" || value === "paused" || value === "all") {
     return value;
   }
 
-  return new Error("status must be completed, active, or all");
+  return new Error("status must be completed, active, paused, or all");
 }
 
 const server = app.listen(port, () => {

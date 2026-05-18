@@ -11,12 +11,13 @@ export type StudySession = {
   summary: string | null;
   source: string | null;
   startedAt: string;
+  pausedAt: string | null;
   endedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
 
-export type StudySessionStatus = "completed" | "active" | "all";
+export type StudySessionStatus = "completed" | "active" | "paused" | "all";
 
 let database: DatabaseSync | undefined;
 
@@ -47,6 +48,7 @@ export function initializeDatabase(db = database ?? openDatabase()) {
       summary TEXT,
       source TEXT,
       startedAt TEXT NOT NULL,
+      pausedAt TEXT,
       endedAt TEXT,
       createdAt TEXT NOT NULL,
       updatedAt TEXT NOT NULL
@@ -56,10 +58,22 @@ export function initializeDatabase(db = database ?? openDatabase()) {
       ON study_sessions (startedAt DESC);
   `);
 
+  migrateStudySessionsSchema(db);
   migrateLegacyNotes(db);
 
   if (!database) {
     database = db;
+  }
+}
+
+function migrateStudySessionsSchema(db: DatabaseSync) {
+  const columns = db.prepare("PRAGMA table_info(study_sessions)").all() as Array<{
+    name: string;
+  }>;
+  const hasPausedAt = columns.some((column) => column.name === "pausedAt");
+
+  if (!hasPausedAt) {
+    db.exec("ALTER TABLE study_sessions ADD COLUMN pausedAt TEXT");
   }
 }
 
@@ -106,6 +120,7 @@ function migrateLegacyNotes(db: DatabaseSync) {
       summary,
       source,
       startedAt,
+      pausedAt,
       endedAt,
       createdAt,
       updatedAt
@@ -116,6 +131,7 @@ function migrateLegacyNotes(db: DatabaseSync) {
       content,
       source,
       ${hasSessionStartedAt ? "COALESCE(sessionStartedAt, createdAt)" : "createdAt"},
+      NULL,
       createdAt,
       createdAt,
       updatedAt
@@ -149,6 +165,7 @@ export function beginStudySession(input: {
     summary: normalizeText(input.summary),
     source: normalizeText(input.source) ?? "chatgpt",
     startedAt: now,
+    pausedAt: null,
     endedAt: input.endSession ? now : null,
     createdAt: now,
     updatedAt: now
@@ -162,11 +179,12 @@ export function beginStudySession(input: {
          summary,
          source,
          startedAt,
+         pausedAt,
          endedAt,
          createdAt,
          updatedAt
        )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       session.id,
@@ -174,6 +192,7 @@ export function beginStudySession(input: {
       session.summary,
       session.source,
       session.startedAt,
+      session.pausedAt,
       session.endedAt,
       session.createdAt,
       session.updatedAt
@@ -190,7 +209,9 @@ export function listStudySessions(search?: string, status: StudySessionStatus = 
   if (status === "completed") {
     where.push("endedAt IS NOT NULL");
   } else if (status === "active") {
-    where.push("endedAt IS NULL");
+    where.push("endedAt IS NULL AND pausedAt IS NULL");
+  } else if (status === "paused") {
+    where.push("endedAt IS NULL AND pausedAt IS NOT NULL");
   }
 
   if (term) {
@@ -203,7 +224,7 @@ export function listStudySessions(search?: string, status: StudySessionStatus = 
 
   return getDatabase()
     .prepare(
-      `SELECT id, topic, summary, source, startedAt, endedAt, createdAt, updatedAt
+      `SELECT id, topic, summary, source, startedAt, pausedAt, endedAt, createdAt, updatedAt
        FROM study_sessions
        ${whereClause}
        ORDER BY startedAt DESC`
@@ -215,7 +236,7 @@ export function getStudySession(id: string) {
   return (
     (getDatabase()
       .prepare(
-        `SELECT id, topic, summary, source, startedAt, endedAt, createdAt, updatedAt
+        `SELECT id, topic, summary, source, startedAt, pausedAt, endedAt, createdAt, updatedAt
          FROM study_sessions
          WHERE id = ?`
       )
@@ -230,6 +251,8 @@ export function updateStudySession(
     summary?: string | null;
     source?: string | null;
     endSession?: boolean;
+    pauseSession?: boolean;
+    resumeSession?: boolean;
   }
 ) {
   const updates: string[] = [];
@@ -254,6 +277,14 @@ export function updateStudySession(
   if (input.endSession) {
     updates.push("endedAt = COALESCE(endedAt, ?)");
     values.push(updatedAt);
+    updates.push("pausedAt = NULL");
+  } else if (input.pauseSession) {
+    updates.push(
+      "pausedAt = CASE WHEN endedAt IS NULL THEN COALESCE(pausedAt, ?) ELSE pausedAt END"
+    );
+    values.push(updatedAt);
+  } else if (input.resumeSession) {
+    updates.push("pausedAt = NULL");
   }
 
   if (updates.length === 0) {

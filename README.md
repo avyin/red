@@ -2,7 +2,7 @@
 
 A tiny study-session journal for chat-based learning.
 
-The app stores study sessions, not standalone notes. A session can start when a user begins learning in ChatGPT, Gemini, Claude, or another chat assistant. When the user asks to save or end the session, the assistant updates that session with a summary and completion timestamp.
+The app stores study sessions, not standalone notes. A session can start when a user begins learning in ChatGPT, Gemini, Claude, or another chat assistant. When the user asks to pause, the assistant marks the session paused so it can be resumed later. When the user asks to save or end the session, the assistant updates that session with a summary and completion timestamp.
 
 ## Setup
 
@@ -90,6 +90,22 @@ curl -X PATCH http://localhost:3001/api/study-sessions/YOUR_SESSION_ID \
   }'
 ```
 
+Pause a study session:
+
+```sh
+curl -X PATCH http://localhost:3001/api/study-sessions/YOUR_SESSION_ID \
+  -H 'Content-Type: application/json' \
+  -d '{"pauseSession":true}'
+```
+
+Resume a paused study session:
+
+```sh
+curl -X PATCH http://localhost:3001/api/study-sessions/YOUR_SESSION_ID \
+  -H 'Content-Type: application/json' \
+  -d '{"resumeSession":true}'
+```
+
 Create a completed study session manually:
 
 ```sh
@@ -113,6 +129,12 @@ List active study sessions:
 
 ```sh
 curl 'http://localhost:3001/api/study-sessions?status=active'
+```
+
+List paused study sessions:
+
+```sh
+curl 'http://localhost:3001/api/study-sessions?status=paused'
 ```
 
 Search study sessions:
@@ -180,8 +202,11 @@ Action workflow for a chat assistant:
 1. When the user starts a study-like interaction, call `startStudySession` with no arguments.
 2. Keep the returned `id` in conversation context.
 3. Teach, discuss, ask questions, or help the user refine their understanding.
-4. When the user says to save, log, or end the session, infer the final `topic` and `summary` from the conversation and call `updateStudySession` with `topic`, `summary`, `source`, and `endSession: true`.
-5. Confirm briefly that the study session was saved.
+4. When the user says to pause or take a break, call `updateStudySession` with `pauseSession: true`. Optionally include a short progress `summary`.
+5. If the user clearly continues the same study topic in the same conversation, call `updateStudySession` with `resumeSession: true` before continuing. If the intent is ambiguous, ask whether they want to continue the paused session.
+6. In a new conversation, when the user asks to continue or pick up where they left off, call `listStudySessions` with `status=paused` and resume the clear match. Ask the user to choose if there are multiple plausible paused sessions.
+7. When the user says to save, log, or end the session, infer the final `topic` and `summary` from the conversation and call `updateStudySession` with `topic`, `summary`, `source`, and `endSession: true`.
+8. Confirm briefly that the study session was saved.
 
 ## Ngrok
 

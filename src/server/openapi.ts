@@ -27,6 +27,12 @@ const schemas = `StudySession:
           type: string
           format: date-time
           description: Server timestamp for when the study session began.
+        pausedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+          description: Server timestamp for when the study session was paused, or null while active or completed.
         endedAt:
           type:
             - string
@@ -75,6 +81,12 @@ const schemas = `StudySession:
         endSession:
           type: boolean
           description: Set true when the user asks to save or end the study session. The server will set endedAt.
+        pauseSession:
+          type: boolean
+          description: Set true when the user asks to pause or take a break from the study session. The server will set pausedAt.
+        resumeSession:
+          type: boolean
+          description: Set true when the user asks to continue a paused study session. The server will clear pausedAt.
     Error:
       type: object
       required:
@@ -97,7 +109,7 @@ export function buildOpenApiYaml() {
   return `openapi: 3.1.0
 info:
   title: Study Session Log API
-  version: 0.2.0
+  version: 0.3.0
 servers:
   - url: ${serverUrl}
 paths:
@@ -133,9 +145,10 @@ paths:
             enum:
               - completed
               - active
+              - paused
               - all
             default: completed
-          description: Which sessions to return. Defaults to completed.
+          description: Which sessions to return. Active excludes paused sessions. Defaults to completed.
       responses:
         "200":
           description: Study sessions newest first
@@ -183,7 +196,7 @@ paths:
     patch:
       operationId: updateStudySession
       summary: Update or complete a study session
-      description: Add topic, summary, or source. Set endSession true when the user asks to save or end the session.
+      description: Add topic, summary, or source. Set endSession true when the user asks to save or end the session, pauseSession true when the user asks to pause, or resumeSession true when the user asks to continue a paused session.
       parameters:
         - name: id
           in: path

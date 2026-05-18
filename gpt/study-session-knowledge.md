@@ -10,6 +10,8 @@ A study session is a single learning interaction.
 
 It starts when the user begins studying a topic and ends when the user asks to save, log, or end the session.
 
+It can also be paused when the user wants to take a break without completing the session. A paused session can later be resumed and completed.
+
 The saved record should represent the learning session, not every message in the conversation.
 
 ## Data Model
@@ -21,6 +23,7 @@ Each study session has:
 - `summary`: optional plain text summary of what the user studied or learned
 - `source`: optional source such as `chatgpt`, `gemini`, `claude`, a course, a book, a website, or `null`
 - `startedAt`: server timestamp for when the session began
+- `pausedAt`: server timestamp for when the session was paused, or `null` while active or completed
 - `endedAt`: server timestamp for when the session was saved or ended, or `null` while active
 - `createdAt`: record creation timestamp
 - `updatedAt`: last update timestamp
@@ -28,9 +31,9 @@ Each study session has:
 ## Action Reference
 
 - `startStudySession`: starts an untitled active study session with a GET request and returns the server-generated `startedAt` timestamp. It takes no arguments. Prefer this for automatic chat-session starts.
-- `listStudySessions`: returns study sessions newest first. Supports optional `search`.
+- `listStudySessions`: returns study sessions newest first. Supports optional `search` and `status` values of `completed`, `active`, `paused`, or `all`.
 - `getStudySession`: returns one study session by ID.
-- `updateStudySession`: updates `topic`, `summary`, or `source`. Can set `endSession: true` to complete the session.
+- `updateStudySession`: updates `topic`, `summary`, or `source`. Can set `endSession: true` to complete the session, `pauseSession: true` to pause it, or `resumeSession: true` to resume it.
 - `deleteStudySession`: deletes one study session by ID.
 
 ## Example Session
